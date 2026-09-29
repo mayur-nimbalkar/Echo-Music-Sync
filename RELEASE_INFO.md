@@ -28,7 +28,7 @@ With these changes complete, I am excited to restore access to the project. I wo
 
 ---
 
-## 📋 Pull Request & Release Note Guidelines
+## Pull Request & Release Note Guidelines
 
 **ATTENTION CONTRIBUTORS:** To maintain a clean and standardized changelog, all community contributions added to this file MUST strictly follow this format:
 

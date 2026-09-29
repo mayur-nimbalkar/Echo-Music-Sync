@@ -1,12 +1,6 @@
 <div align="center">
-  <img src="assets/Echo-new.png" alt="Echo Music Logo" width="120"/>
-
-  <h1>Echo Music</h1>
-
-  <p><b>A modern Android music app with ad-free streaming, synced lyrics, offline playback, and an intuitive user experience.</b></p>
+  <img src="assets/banner.png" alt="Echo Music Logo" />
 </div>
-
----
 
 ## Overview
 
@@ -25,6 +19,7 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 
 - [Overview](#overview)
 - [Screenshots](#screenshots)
+- [Technical Architecture & Stack](#technical-architecture--stack)
 - [Features](#features)
 - [Installation & Setup](#installation--setup)
 - [Support the Project](#support-the-project)
@@ -84,18 +79,38 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 
 ---
 
+## Technical Architecture & Stack
+
+Echo Music is built on modern Android development practices, emphasizing clean architecture, modularity, and high performance.
+
+### Core Stack
+- **Kotlin:** 100% written in Kotlin, utilizing Coroutines and Flow for asynchronous data streams and state management.
+- **UI Framework:** Jetpack Compose (Material 3). We use a heavily customized dynamic color system that extends M3 with iOS-inspired glassmorphism effects via `RenderEffect`.
+- **Architecture:** MVVM (Model-View-ViewModel) combined with Clean Architecture principles. State is managed via `StateFlow` and hoisted where appropriate.
+- **Dependency Injection:** Hilt (Dagger) for robust, compile-time verified dependency injection across view models, repositories, and services.
+
+### Media & Playback
+- **Media3 (ExoPlayer):** The playback engine is powered by AndroidX Media3, providing a robust `MediaSessionService` that deeply integrates with Android's system media controls, Android Auto, and background playback capabilities.
+- **InnerTubeX Engine:** Handles complex media stream resolution, chunked caching, zero-latency read-ahead, and resilient playback bypassing BotGuard.
+- **Local Media Management:** Built-in capability to parse and play local on-device `.mp3`, `.flac`, and `.m4a` files.
+
+### Persistence & Data
+- **Room Database:** SQLite abstraction for caching songs, albums, artists, custom playlists, and offline lyrics locally.
+- **DataStore:** Type-safe preference storage using Jetpack DataStore (Preferences and Proto) to handle user settings and UI state persistence.
+
+### Distinctive Features Under the Hood
+- **Listen Together:** A custom real-time WebSockets synchronization protocol allowing sub-millisecond precision playback coordination between multiple clients.
+- **AI Lyrics Translation:** Configurable API integrations (OpenRouter, OpenAI) allowing on-the-fly, contextual translation of song lyrics.
+- **Spotify Fast Sync:** A dedicated sync engine that securely pulls user playlists from the Spotify Web API and matches them against the YouTube Music catalog.
+
+---
+
 ## Features
 
-### What's New
+### Upcoming Features
 
-> - **Data Saver Mode (Beta)** — Automatically reduces data usage during playback for limited connections.
-> - **Settings Search Index** — Quickly find and navigate to any settings option instantly.
-> - **Redesigned UI** — Cleaner, faster, and more intuitive interface from the ground up.
-> - **Import & Sync from Spotify** — Bring your playlists over with ease and keep them up-to-date with one-tap Fast Sync.
-> - **Listen Together** — Sync music in real time, similar to Spotify Jam.
-> - **Podcast Support** — Listen to podcasts alongside your music library.
-> - **Local Media Support** — Play music files stored directly on your device.
 > - **Dynamic Island Support** — Enhanced playback notifications on supported Android devices.
+> - **Podcast Support** — Listen to podcasts alongside your music library.
 
 <br>
 
@@ -103,6 +118,7 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 <summary><b>Streaming & Playback</b></summary>
 <br>
 
+- **Local Media Support** — Play music files stored directly on your device.
 - **Ad-Free** — Stream without any interruptions.
 - **InnerTubeX Engine** — Highly resilient playback engine bypassing age-restrictions and BotGuard with chunked caching and zero-latency read-ahead.
 - **Data Saver Mode** — Reduce data consumption when streaming on cellular networks.
@@ -140,6 +156,8 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 <summary><b>Integrations</b></summary>
 <br>
 
+- **Import & Sync from Spotify** — Bring your playlists over with ease and keep them up-to-date with one-tap Fast Sync.
+- **Listen Together** — Sync music in real time, similar to Spotify Jam.
 - **Music Sharing via Odesli** — Share songs as Song.link for cross-platform listening.
 - **Set as Ringtone** — Directly set any song as your device ringtone.
 
@@ -158,6 +176,8 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 <summary><b>Customization</b></summary>
 <br>
 
+- **Redesigned UI** — Cleaner, faster, and more intuitive interface from the ground up.
+- **Settings Search Index** — Quickly find and navigate to any settings option instantly.
 - **UI Density Scale** — Adjust interface spacing to your preference.
 - **High Refresh Rate Support** — Smoother UI and animations on supported displays.
 - **Fluid UI & Animations** — Material 3 Emphasized easing and GPU-accelerated lyrics for a silky smooth, lag-free experience.
@@ -228,10 +248,10 @@ If Echo Music has been useful to you, consider supporting its development.
         <a href="https://buymeacoffee.com/iad1tya" style="text-decoration:none;"><img src="assets/bmac.png" alt="Buy Me A Coffee Logo" width="140" style="border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2);"/></a>
       </td>
       <td align="center" style="padding: 15px; border: none;">
-        <a href="https://intradeus.github.io/http-protocol-redirector/?r=upi://pay?pa=iad1tya@upi&pn=Aditya%20Yadav&am=&tn=Thank%20You" style="text-decoration:none;"><img src="assets/upi.svg" alt="UPI Logo" width="100" style="border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2);"/></a>
+        <a href="https://intradeus.github.io/http-protocol-redirector/?r=upi://pay?pa=iad1tya@upi&pn=Aditya%20Yadav&am=&tn=Thank%20You" style="text-decoration:none;"><img src="assets/UPI.png" alt="UPI Logo" width="140" style="border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2);"/></a>
       </td>
       <td align="center" style="padding: 15px; border: none;">
-        <a href="https://www.patreon.com/cw/iad1tya" style="text-decoration:none;"><img src="assets/patreon3.png" alt="Patreon Logo" width="100" style="border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2);"/></a>
+        <a href="https://www.patreon.com/cw/iad1tya" style="text-decoration:none;"><img src="assets/patreon3.webp" alt="Patreon Logo" width="140" style="border-radius: 12px; box-shadow: 0 8px 16px rgba(0,0,0,0.2);"/></a>
       </td>
     </tr>
   </table>

@@ -74,13 +74,17 @@ KEY_PASSWORD=your_key_password
 
 Open the project in Android Studio or build from the command line.
 
-Echo Music now ships a single **GMS** build variant (with Google Cast support). The previous FOSS (no Google Play Services) variant has been removed.
+Echo Music has two build variants: **FOSS** (without Google Play Services / Cast) and **GMS** (with Cast support).
 
 ```bash
-# Debug build
+# FOSS Debug build
+./gradlew assembleUniversalFossDebug
+
+# GMS Debug build
 ./gradlew assembleUniversalGmsDebug
 
-# Release build (requires signing configuration)
+# Release builds (requires signing configuration)
+./gradlew assembleUniversalFossRelease
 ./gradlew assembleUniversalGmsRelease
 ```
 
