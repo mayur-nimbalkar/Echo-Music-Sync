@@ -97,6 +97,7 @@ If a new feature needs a UI pattern not covered in `DESIGN.md`, create a minimal
 - Room schema changes require a migration in `db/` and the schema JSON is
   version-controlled under `app/schemas/` — don't skip migrations.
 - **Networking:** Use Ktor for all new network requests. Retrofit is maintained for legacy endpoints but should not be used for new features.
+- **Reel import (Instagram):** lives in `reelimport/` (`ReelMatcher`, `ReelImportViewModel`, `ReelImportState`, `ReelTitleParser`), UI in `ui/screens/reelimport/ReelImportScreen.kt`, route `reel_import?url=...`. Uses `youtubedl-android` (yt-dlp) for metadata + raw PCM extraction and reuses the Echo Find Shazam stack (`VibraSignature` + `:shazamkit`) for fingerprinting; matching resolves on YouTube Music via InnerTube search. The user confirms the match before it is added to a playlist; the chosen playlist can be remembered as a default (`ReelImportDefaultPlaylistIdKey`). `ReelTitleParser` is pure JVM code with unit tests in `app/src/test`. Share/intent entry point: `MainActivity.handleDeepLinkIntent` routes `instagram.com` links to the `reel_import` route.
 
 ### Things to double check before assuming
 
@@ -191,6 +192,7 @@ models/         Shared data models
 playback/       Media3/ExoPlayer service, download manager, queueing, audio
 quicksettings/  Android quick settings tile
 recognition/    Music recognition (Echo Find) app-side logic
+reelimport/     Instagram Reel import (yt-dlp + Shazam → playlist), UI in ui/screens/reelimport/
 spotify/        Spotify API integration
 spotifyimport/  Import playlists/tracks from Spotify
 ui/

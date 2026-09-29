@@ -1,0 +1,7 @@
+{
+  "features": [
+    "Reel Import — Share an Instagram Reel to Echo Music: it extracts the reel's audio with yt-dlp, fingerprints it with Echo Find (Shazam), asks you to confirm the matched song, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap."
+  ],
+  "bug_fixes": [],
+  "contributors": []
+}

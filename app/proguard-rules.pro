@@ -27,6 +27,15 @@
     void resumeWithException(...);
 }
 
+# youtubedl-android (Instagram Reel import) — Jackson parses --dump-json output into VideoInfo
+-keep class com.yausername.youtubedl_android.** { *; }
+-keep class com.fasterxml.jackson.** { *; }
+-keepclassmembers class com.yausername.youtubedl_android.mapper.** { *; }
+-keepnames class com.yausername.youtubedl_android.mapper.VideoInfo
+-keepnames class com.yausername.youtubedl_android.mapper.VideoFormat
+-keepnames class com.yausername.youtubedl_android.mapper.VideoThumbnail
+-keepnames class com.yausername.youtubedl_android.mapper.VideoSubtitle
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:

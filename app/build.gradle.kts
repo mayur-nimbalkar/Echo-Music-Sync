@@ -351,4 +351,10 @@ dependencies {
   implementation(libs.work.runtime.ktx)
   implementation(libs.androidx.core.splashscreen)
   implementation(libs.ffmpeg.kit.audio)
+
+  // yt-dlp for Instagram Reel import (metadata + audio extraction)
+  implementation(libs.youtubedl.android.library)
+  implementation(libs.youtubedl.android.ffmpeg)
+
+  testImplementation(libs.junit)
 }
