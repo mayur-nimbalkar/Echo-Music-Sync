@@ -39,7 +39,7 @@ object ReelTitleParser {
     title = ON_INSTAGRAM_PREFIX.replace(title, "")
     title = INSTAGRAM_SUFFIX.replace(title, "")
     title = TAGS_AND_MENTIONS.replace(title, " ")
-    title = title.trim(TRIM_CHARS)
+    title = title.trim(*TRIM_CHARS.toCharArray())
     return title.replace(Regex("\\s+"), " ").trim()
   }
 }

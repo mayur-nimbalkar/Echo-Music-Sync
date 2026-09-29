@@ -1598,13 +1598,14 @@ class MainActivity : ComponentActivity() {
     val coroutineScope = lifecycle.coroutineScope
 
     // Instagram reel share → reel import flow (fingerprint match → confirm → playlist).
-    val instagramHost = uri.host?.orEmpty()?.lowercase()
-    if (instagramHost == "instagram.com" ||
-        instagramHost == "instagr.am" ||
-        instagramHost == "www.instagram.com" ||
-        instagramHost == "m.instagram.com" ||
-        instagramHost.endsWith(".instagram.com") ||
-        instagramHost.endsWith(".instagr.am")
+    val instagramHost = uri.host?.lowercase()
+    if (instagramHost != null &&
+        (instagramHost == "instagram.com" ||
+          instagramHost == "instagr.am" ||
+          instagramHost == "www.instagram.com" ||
+          instagramHost == "m.instagram.com" ||
+          instagramHost.endsWith(".instagram.com") ||
+          instagramHost.endsWith(".instagr.am"))
     ) {
       val encoded = URLEncoder.encode(uri.toString(), "UTF-8")
       navController.navigate("reel_import?url=$encoded") { launchSingleTop = true }

@@ -4,19 +4,18 @@ import android.content.Context
 import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
 import com.music.shazamkit.models.RecognitionResult
-import com.yausername.youtubedl_android.FFmpeg
+import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
-import com.yausername.youtubedl_android.YoutubeDLRequest
 import com.yausername.youtubedl_android.YoutubeDLException
-import com.yausername.youtubedl_android.mapper.VideoInfo
+import com.yausername.youtubedl_android.YoutubeDLRequest
 import echo.music.iad1tya.recognition.AudioResampler
 import echo.music.iad1tya.recognition.DecodedAudio
 import echo.music.iad1tya.recognition.VibraSignature
 import echo.music.iad1tya.utils.reportException
 import java.io.File
 import java.nio.ByteBuffer
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import timber.log.Timber
 
@@ -137,13 +136,14 @@ object ReelMatcher {
         request.addOption("--socket-timeout", 15)
         val response = YoutubeDL.getInstance().execute(request)
         if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
-        val info = YoutubeDL.objectMapper.readValue(response.out, VideoInfo::class.java)
+        // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
+        val json = org.json.JSONObject(response.out)
         ReelInfo(
           url = url,
-          title = info.fulltitle ?: info.title ?: "",
-          uploader = info.uploader,
-          thumbnailUrl = info.thumbnail,
-          durationSeconds = info.duration,
+          title = json.optString("fulltitle").ifBlank { json.optString("title") },
+          uploader = json.optString("uploader").ifBlank { null },
+          thumbnailUrl = json.optString("thumbnail").ifBlank { null },
+          durationSeconds = json.optInt("duration", 0),
         )
       }
         .onFailure { Timber.tag("ReelMatcher").e(it, "fetchReelInfo failed for %s", url) }
@@ -225,7 +225,7 @@ object ReelMatcher {
         ReelImportState.report(ReelImportStage.YTDLP_ERROR)
         null
       } catch (e: Exception) {
-        ensureActive()
+        if (e is kotlinx.coroutines.CancellationException) throw e
         Timber.tag("ReelMatcher").e(e, "Audio extraction failed unexpectedly")
         null
       } finally {
@@ -249,7 +249,7 @@ object ReelMatcher {
   /** Searches YouTube Music's song filter and returns plain [SongItem]s. */
   private suspend fun searchYouTubeMusic(query: String): List<SongItem> {
     if (query.isBlank()) return emptyList()
-    return runCatching { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG) }
+    return runCatching { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrThrow() }
       .onFailure { reportException(it) }
       .getOrNull()
       ?.items
