@@ -195,6 +195,28 @@
     <string name="modify_with_ai_desc">Modify playlist using AI instructions</string>
     <string name="ai_modify_prompt_hint">e.g., Remove sad songs, add some 90s hits</string>
 
+    <string name="reel_import">Reel import</string>
+    <string name="reel_import_title">Import from Reel</string>
+    <string name="reel_import_fetching_metadata">Fetching reel info…</string>
+    <string name="reel_import_extracting_audio">Extracting audio…</string>
+    <string name="reel_import_listening">Identifying the song…</string>
+    <string name="reel_import_matching">Matching on YouTube Music…</string>
+    <string name="reel_import_confirm_prompt">Is this the song from your reel?</string>
+    <string name="reel_import_confirmed_from_title">From reel title: %s</string>
+    <string name="reel_import_listen_again">Listen again</string>
+    <string name="reel_import_original_audio">Original audio of the reel</string>
+    <string name="reel_import_failed">Could not identify the song from this reel</string>
+    <string name="reel_import_error_ytdlp">Audio extraction failed. Try updating yt-dlp.</string>
+    <string name="reel_import_not_reel">This link is not an Instagram Reel</string>
+    <string name="reel_import_try_different_reel">Try a different reel</string>
+    <string name="reel_import_add_to_playlist">Add to playlist</string>
+    <string name="reel_import_choose_playlist">Choose a playlist</string>
+    <string name="reel_import_default_playlist">Add future reels without asking</string>
+    <string name="reel_import_default_playlist_desc">Reels will be added automatically to %s</string>
+    <string name="reel_import_stop_default">Stop adding automatically</string>
+    <string name="reel_import_added">Added to %s</string>
+    <string name="reel_import_no_playlists">No playlists yet. Create one to save this song.</string>
+
     <string name="edit_artist">Edit artist</string>
     <string name="artist_name">Artist name</string>
     <string name="error_artist_name_empty">Artist name cannot be empty.</string>

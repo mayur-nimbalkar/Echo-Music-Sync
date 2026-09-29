@@ -97,6 +97,11 @@ class App : Application(), SingletonImageLoader.Factory {
     echo.music.iad1tya.utils.cipher.CipherDeobfuscator.initialize(this)
     echo.music.iad1tya.utils.YTPlayerUtils.initialize()
 
+    // yt-dlp binaries for Instagram Reel import (background; first run unpacks python+ffmpeg)
+    applicationScope.launch(Dispatchers.IO) {
+      echo.music.iad1tya.reelimport.ReelMatcher.init(this@App)
+    }
+
     if (BuildConfig.DEBUG) {
       Timber.plant(Timber.DebugTree())
     }

@@ -299,6 +299,7 @@ Echo Music stands on the shoulders of several excellent open-source projects. Si
 | **[Music Recognizer](https://github.com/aleksey-saenko/MusicRecognizer)**                                                 | Audio recognition (Echo Find)                       |
 | **[BravePipe](https://github.com/bravepipeproject/BravePipe)**                                                            | Decryption handling and backup playback engine      |
 | **[InnerTubeX](https://github.com/MetrolistGroup/innertubex)**                                                            | Advanced stream resolution, playback resilience, and BotGuard bypass      |
+| **[youtubedl-android](https://github.com/junkfood02/youtubedl-android)**                                                  | yt-dlp wrapper used by Instagram Reel import for reel metadata and audio extraction |
 
 ---
 

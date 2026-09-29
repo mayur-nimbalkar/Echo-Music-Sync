@@ -40,6 +40,7 @@ import echo.music.iad1tya.ui.screens.playlist.OnlinePlaylistScreen
 import echo.music.iad1tya.ui.screens.playlist.TopPlaylistScreen
 import echo.music.iad1tya.ui.screens.recognition.RecognitionHistoryScreen
 import echo.music.iad1tya.ui.screens.recognition.RecognitionScreen
+import echo.music.iad1tya.ui.screens.reelimport.ReelImportScreen
 import echo.music.iad1tya.ui.screens.search.OnlineSearchResult
 import echo.music.iad1tya.ui.screens.search.SearchScreen
 import echo.music.iad1tya.ui.screens.settings.AboutScreen
@@ -525,6 +526,22 @@ fun NavGraphBuilder.navigationBuilder(
   dialog("equalizer") { EqScreen(navController = navController) }
 
   composable("recognition") { RecognitionScreen(navController) }
+
+  composable(
+    route = "reel_import?url={url}",
+    arguments =
+      listOf(
+        navArgument("url") {
+          type = NavType.StringType
+          nullable = true
+        }
+      )
+  ) { backStackEntry ->
+    ReelImportScreen(
+      navController = navController,
+      initialReelUrl = backStackEntry.arguments?.getString("url"),
+    )
+  }
 
   composable("recognition_history") { RecognitionHistoryScreen(navController) }
   composable("settings/changelog") { ChangelogScreen(navController, scrollBehavior) }

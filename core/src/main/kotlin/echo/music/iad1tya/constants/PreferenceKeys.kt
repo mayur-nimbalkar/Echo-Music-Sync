@@ -801,6 +801,9 @@ val AmbientShowTitleKey = booleanPreferencesKey("ambient_show_title")
 val AmbientShowArtistKey = booleanPreferencesKey("ambient_show_artist")
 val AmbientShowLyricsKey = booleanPreferencesKey("ambient_show_lyrics")
 
+// Reel import (Instagram Reel → playlist)
+val ReelImportDefaultPlaylistIdKey = stringPreferencesKey("reelImportDefaultPlaylistId")
+
 
 enum class AppFont(val value: String) {
     SYSTEM("system"),

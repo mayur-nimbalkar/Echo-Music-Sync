@@ -86,3 +86,12 @@ Do NOT strictly force Material 3 components if they break the app's custom aesth
 Before adding a brand new UI component, always check `ui/component/` to see if an existing one already implements our conventions.
 
 **Key Rule:** When working on UI, **look at the existing screens** (like the original Listen Together or Settings screens) and copy their specific visual style, spacing, and modifier chains. Do NOT refactor existing screens to match standard Material 3 unless explicitly requested. Our custom aesthetic takes precedence over M3 guidelines.
+
+### Reel Import screen (`ui/screens/reelimport/ReelImportScreen.kt`)
+
+Introduced for Instagram Reel imports, reusing established patterns rather than new ones:
+
+- **Progress states** follow the Recognition screen's centered `Column` + large `CircularProgressIndicator` (96.dp, 6.dp stroke, `onSurface` tint) with per-stage labels.
+- **Confirmation card** uses the app's translucent card language: `RoundedCornerShape(24.dp)` artwork with generous whitespace, bold `titleLarge` prompt, `primary`-colored matched title, and `onSurfaceVariant` supporting text.
+- **Playlist chooser** reuses `ListDialog` + `PlaylistListItem` + `listItemShape` (identical to AddToPlaylistDialog), with a custom segmented-style `Row` + `Switch` header for the "add future reels without asking" default-playlist option.
+- **Success state** is a primary-filled `CircleShape` badge with `check`, mirroring Nothing-OS minimal monochrome feedback rather than decorative animation.
