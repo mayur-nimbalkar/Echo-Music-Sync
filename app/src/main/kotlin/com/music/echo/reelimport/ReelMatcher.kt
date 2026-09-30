@@ -35,8 +35,11 @@ import timber.log.Timber
  */
 object ReelMatcher {
 
-  /** How much audio we decode for fingerprinting (from the start of the track). */
-  private const val MAX_EXCERPT_BYTES = 800_000 // ~12.5 s of 16-bit stereo @ 16 kHz
+  /** One fingerprint window: ~12.5 s of 16-bit stereo @ 16 kHz. */
+  private const val MAX_EXCERPT_BYTES = 800_000
+
+  /** Total audio kept for the two fingerprint windows (start + middle): ~50 s. */
+  private const val MAX_TOTAL_PCM_BYTES = 3_200_000L
 
   /** Audio format the excerpt is converted into before fingerprinting. */
   private const val PCM_SAMPLE_RATE = 16_000
@@ -56,6 +59,9 @@ object ReelMatcher {
 
   /** Metadata queries tried before the pipeline gives up on search-only identification. */
   private const val MAX_METADATA_QUERIES = 3
+
+  /** Weak (caption-line) queries tried after fingerprinting said nothing. */
+  private const val MAX_WEAK_QUERIES = 2
 
   /** Reel URLs accepted by the importer. */
   private val REEL_URL_REGEX =
@@ -134,36 +140,37 @@ object ReelMatcher {
 
       val info = fetchReelInfo(reelUrl) ?: return@withContext MatchResult.Error("Reel could not be fetched")
 
-      // Stage 1 — metadata: Instagram track fields, then mined caption hints.
-      val metadataQueries = buildList {
-        info.track?.let { track ->
-          add(listOfNotNull(track, info.artist, info.album).joinToString(" ").trim())
+      // Hints are ranked: strong ones name the song on their own (markers, ♪ fragments,
+      // quotes, Instagram track fields); weak ones (caption lines, placeholder title)
+      // often don't name it at all. Weak guesses are tried only AFTER the reel's actual
+      // audio has been fingerprinted, so junk captions can never beat the audio.
+      val (strongHints, weakHints) = run {
+        val ranked = ReelTitleParser.rankedQueryCandidates(info.title, info.caption)
+        val trackCombo = info.track?.let { track ->
+          listOfNotNull(track, info.artist, info.album).joinToString(" ").trim().takeIf { it.isNotBlank() }
         }
-        addAll(ReelTitleParser.queryCandidates(info.title, info.caption))
+        (listOfNotNull(trackCombo) + ranked.first).distinct() to ranked.second
       }
-        .map { it.trim() }
-        .filter { it.isNotBlank() }
-        .distinct()
-        .take(MAX_METADATA_QUERIES)
 
+      // Stage 1 — search strong metadata hints.
       var searchFailed = false
-      if (metadataQueries.isNotEmpty()) {
+      if (strongHints.isNotEmpty()) {
         ReelImportState.report(ReelImportStage.MATCHING)
-        for (query in metadataQueries) {
+        for (query in strongHints.take(MAX_METADATA_QUERIES)) {
           // Show the live query so long stages are never a blind spinner.
           ReelImportState.update { it.copy(searchQuery = query) }
           val candidates = searchYouTubeMusic(query)
           when {
             candidates == null -> searchFailed = true // network/timeout — emptiness proves nothing
             candidates.isNotEmpty() -> {
-              Timber.tag("ReelMatcher").i("Metadata query \"%s\" matched: %s", query, candidates.first().title)
+              Timber.tag("ReelMatcher").i("Strong query \"%s\" matched: %s", query, candidates.first().title)
               return@withContext MatchResult.TitleFallback(candidates, info.title)
             }
           }
         }
       }
 
-      // Stage 2 — audio: fingerprint a short excerpt only when metadata failed.
+      // Stage 2 — audio: fingerprint the reel's actual audio (start + middle windows).
       // Skipped when YouTube Music itself is unreachable: a fingerprint match still needs
       // a YT Music resolve, so this would only add minutes to the same failure.
       if (!searchFailed) {
@@ -172,39 +179,44 @@ object ReelMatcher {
         val recognition = fingerprintResult.getOrNull()
 
         if (recognition != null) {
-          // Prefer the fingerprint match resolved on YouTube Music.
           val resolved = resolveOnYouTubeMusic(recognition, info.title)
           if (resolved != null) return@withContext resolved
-          val fb = fallbackToTitle(info.title, recognition.title)
-          if (fb is MatchResult.TitleFallback) return@withContext fb
+          // Fingerprint matched a song that isn't on YT Music — search its name directly
+          // (the placeholder reel title would only shadow it).
+          val query = "${recognition.title} ${recognition.artist}".trim()
+          val candidates = searchYouTubeMusic(query).orEmpty()
+          if (candidates.isNotEmpty()) return@withContext MatchResult.TitleFallback(candidates, info.title)
         } else {
           fingerprintResult.exceptionOrNull()?.let {
             Timber.tag("ReelMatcher").e(it, "Fingerprinting failed")
           }
-          val fb = fallbackToTitle(info.title, null)
-          if (fb is MatchResult.TitleFallback) return@withContext fb
         }
       } else {
         Timber.tag("ReelMatcher").w("YouTube Music unreachable — skipping extraction/fingerprinting")
       }
 
-      // Stage 3 — never dead-end: hand the best mined hint to the picker, prefilled
-      // into the manual search box so the user can correct it in one tap. (When searches
-      // succeeded, the cleaned-title query has already been tried and was empty.)
-      val hint = metadataQueries.firstOrNull().orEmpty()
+      // Stage 3 — weak metadata hints (raw caption lines / cleaned title). Reached only
+      // when the audio said nothing; weaker than the audio, stronger than giving up.
+      if (!searchFailed && weakHints.isNotEmpty()) {
+        ReelImportState.report(ReelImportStage.MATCHING)
+        for (query in weakHints.take(MAX_WEAK_QUERIES)) {
+          ReelImportState.update { it.copy(searchQuery = query) }
+          val candidates = searchYouTubeMusic(query)
+          if (candidates != null && candidates.isNotEmpty()) {
+            Timber.tag("ReelMatcher").i("Weak query \"%s\" matched: %s", query, candidates.first().title)
+            return@withContext MatchResult.TitleFallback(candidates, info.title)
+          }
+        }
+      }
+
+      // Stage 4 — never dead-end: hand the best mined hint to the picker, prefilled
+      // into the manual search box so the user can correct it in one tap.
+      val hint = (strongHints + weakHints).firstOrNull().orEmpty()
       MatchResult.TitleFallback(emptyList(), hint.ifBlank { info.title })
     }
 
   /** Manual search used by the UI so a failed match never dead-ends the flow. */
   suspend fun search(query: String): List<SongItem> = searchYouTubeMusic(query.trim()).orEmpty()
-
-  /** Title-based YouTube Music search used when the pipeline has nothing better. */
-  private suspend fun fallbackToTitle(reelTitle: String, hint: String?): MatchResult? {
-    val query = ReelTitleParser.clean(reelTitle).ifBlank { hint.orEmpty() }
-    if (query.isBlank()) return null
-    val candidates = searchYouTubeMusic(query).orEmpty()
-    return if (candidates.isEmpty()) MatchResult.NoMatch else MatchResult.TitleFallback(candidates, reelTitle)
-  }
 
   /** Fetches reel metadata with yt-dlp (no media download). */
   private suspend fun fetchReelInfo(url: String): ReelInfo? =
@@ -238,15 +250,40 @@ object ReelMatcher {
     }
 
   /**
-   * Downloads a short audio excerpt and recognizes it with Shazam.
+   * Downloads the reel's audio and fingerprints two windows: the start and, when the
+   * clip is long enough, the middle. Reels frequently open with speech or silence and
+   * only play the song later — one window is often not enough.
    * Returns null when extraction/fingerprinting infrastructure is unavailable —
-   * callers then fall back to a title-based search.
+   * callers then fall back to weaker metadata hints.
    */
   private suspend fun recognizeByFingerprint(context: Context, url: String): RecognitionResult? {
     val pcm = extractPcmExcerpt(context, url) ?: return null
 
     ReelImportState.report(ReelImportStage.LISTENING)
 
+    // Split the extracted audio into overlapping windows and fingerprint each.
+    val windowBytes = MAX_EXCERPT_BYTES
+    val totalWindows = if (pcm.size <= windowBytes) 1 else 2
+    val secondWindowStart =
+      if (totalWindows == 2) ((pcm.size - windowBytes).coerceAtLeast(0)) / 2 else 0
+
+    for (windowIndex in 0 until totalWindows) {
+      val start = if (windowIndex == 0) 0 else secondWindowStart
+      val end = minOf(start + windowBytes, pcm.size)
+      if (end - start < 32_000) continue // ~0.5 s — too short to fingerprint
+
+      val window = pcm.copyOfRange(start, end)
+      val recognition = fingerprintWindow(window)
+      if (recognition != null) {
+        Timber.tag("ReelMatcher").i("Fingerprint window %d matched", windowIndex)
+        return recognition
+      }
+    }
+    return null
+  }
+
+  /** Fingerprints one PCM window (16-bit LE stereo @ 16 kHz) with Shazam. */
+  private suspend fun fingerprintWindow(pcm: ByteArray): RecognitionResult? {
     val decoded = DecodedAudio(pcm, PCM_CHANNELS, PCM_SAMPLE_RATE, android.media.AudioFormat.ENCODING_PCM_16BIT)
     val resampled =
       AudioResampler.resample(decoded, VibraSignature.REQUIRED_SAMPLE_RATE).getOrElse { error ->
@@ -307,9 +344,10 @@ object ReelMatcher {
         outFile = wavFile
         Timber.tag("ReelMatcher").i("PCM excerpt ready: %d bytes", wavFile.length())
 
-        val excerptSize =
-          minOf(MAX_EXCERPT_BYTES.toLong() + WAV_HEADER_BYTES, outFile.length()).toInt()
-        val buffer = ByteBuffer.allocate(excerptSize)
+        // Read the whole PCM payload (capped) so two fingerprint windows are possible:
+        // the clip's start AND its middle, since many reels open with speech.
+        val pcmSize = minOf(MAX_TOTAL_PCM_BYTES, (outFile.length() - WAV_HEADER_BYTES).coerceAtLeast(0L)).toInt()
+        val buffer = ByteBuffer.allocate(pcmSize)
         outFile.inputStream().use { input ->
           // Discard the WAV container header — only raw PCM goes to the fingerprinter.
           val header = ByteArray(WAV_HEADER_BYTES.toInt())
