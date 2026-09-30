@@ -205,7 +205,11 @@
     <string name="reel_import_confirmed_from_title">From reel title: %s</string>
     <string name="reel_import_listen_again">Listen again</string>
     <string name="reel_import_original_audio">Original audio of the reel</string>
-    <string name="reel_import_failed">Could not identify the song from this reel</string>
+    <string name="reel_import_failed">Couldn\'t find that song.</string>
+    <string name="reel_import_searching">Searching “%s”…</string>
+    <string name="reel_import_search_hint">Song title or artist</string>
+    <string name="reel_import_search_action">Search</string>
+    <string name="reel_import_search_manually_hint">Automatic identification found nothing — search for the song manually.</string>
     <string name="reel_import_error_ytdlp">Audio extraction failed. Try updating yt-dlp.</string>
     <string name="reel_import_not_reel">This link is not an Instagram Reel</string>
     <string name="reel_import_try_different_reel">Try a different reel</string>

@@ -1,7 +1,12 @@
 {
   "features": [
-    "Reel Import — Share an Instagram Reel to Echo Music: it extracts the reel's audio with yt-dlp, fingerprints it with Echo Find (Shazam), asks you to confirm the matched song, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap."
+    "Reel Import — Share an Instagram Reel to Echo Music: it identifies the song and asks you to confirm the match, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap."
   ],
-  "bug_fixes": [],
+  "bug_fixes": [
+    "Reel Import is now metadata-first: the reel's caption and Instagram audio track fields are searched on YouTube Music within seconds, before any audio download is attempted.",
+    "Caption song hints (song:/music:/audio: markers, ♪ lyric fragments, quoted song names) are mined for far better matches; hashtag/emoji/noise-prefix cleanup improved.",
+    "The import flow never dead-ends anymore — a manual song search is built into the candidate picker, including when automatic identification fails.",
+    "yt-dlp audio extraction hardened with a browser user-agent and relaxed TLS checks for reels that blocked anonymous downloads."
+  ],
   "contributors": []
 }
