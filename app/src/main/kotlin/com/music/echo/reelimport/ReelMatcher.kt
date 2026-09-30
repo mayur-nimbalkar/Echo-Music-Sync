@@ -196,7 +196,7 @@ object ReelMatcher {
     }
 
   /** Manual search used by the UI so a failed match never dead-ends the flow. */
-  suspend fun search(query: String): List<SongItem> = searchYouTubeMusic(query.trim())
+  suspend fun search(query: String): List<SongItem> = searchYouTubeMusic(query.trim()).orEmpty()
 
   /** Title-based YouTube Music search used when the pipeline has nothing better. */
   private suspend fun fallbackToTitle(reelTitle: String, hint: String?): MatchResult? {
@@ -356,7 +356,7 @@ object ReelMatcher {
   ): MatchResult.Matched? {
     val query = "${recognition.title} ${recognition.artist}".trim()
     if (query.isBlank()) return null
-    val song = searchYouTubeMusic(query).firstOrNull() ?: return null
+    val song = searchYouTubeMusic(query).orEmpty().firstOrNull() ?: return null
     return MatchResult.Matched(song, recognition, reelTitle)
   }
 
