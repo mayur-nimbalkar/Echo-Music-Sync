@@ -20,15 +20,16 @@ import kotlinx.coroutines.withContext
 import timber.log.Timber
 
 /**
- * Identifies the background music of an Instagram Reel and resolves it to a YouTube Music track.
+ * Identifies the background music of an Instagram Reel and resolves it to YouTube Music tracks.
  *
- * Pipeline:
- * 1. yt-dlp fetches reel metadata (`--dump-json`) — title, uploader, thumbnail.
- * 2. yt-dlp extracts a short audio excerpt (`-x --audio-format s16le`).
- * 3. The excerpt is resampled to 16 kHz mono and fingerprinted with the same
- *    [VibraSignature] used by Echo Find.
- * 4. Shazam matches the fingerprint; the match is resolved on YouTube Music via InnerTube search
- *    (falling back to a title-based search when fingerprinting fails).
+ * Pipeline (metadata-first, fast by default):
+ * 1. yt-dlp fetches reel metadata (`--dump-json`) — caption/title, track/artist fields, thumbnail.
+ * 2. Song hints are mined from the caption (`song:` markers, ♪ fragments, quoted lyrics, track
+ *    fields) and searched on YouTube Music. This usually completes in seconds with no download.
+ * 3. Only when the caption yields nothing does it fall back to extracting a short audio excerpt
+ *    and fingerprinting it with the same [VibraSignature] used by Echo Find.
+ *
+ * A public [search] is exposed so the UI always offers a manual escape hatch.
  */
 object ReelMatcher {
 
@@ -38,6 +39,9 @@ object ReelMatcher {
   /** Audio format the excerpt is converted into before fingerprinting. */
   private const val PCM_SAMPLE_RATE = 16_000
   private const val PCM_CHANNELS = 2
+
+  /** yt-dlp network timeouts in seconds. */
+  private const val SOCKET_TIMEOUT_SECONDS = 15
 
   /** Reel URLs accepted by the importer. */
   private val REEL_URL_REGEX =
@@ -57,7 +61,10 @@ object ReelMatcher {
       val reelTitle: String,
     ) : MatchResult()
 
-    /** Fingerprinting failed, but a title-based YouTube Music search found candidates. */
+    /**
+     * Metadata-based candidates (caption hints / track fields), or a bare title search
+     * when no hint could be mined. The user confirms or picks manually.
+     */
     data class TitleFallback(val songs: List<SongItem>, val reelTitle: String) : MatchResult()
 
     /** The link is not a reel (or is private/deleted). */
@@ -77,6 +84,14 @@ object ReelMatcher {
     val uploader: String?,
     val thumbnailUrl: String?,
     val durationSeconds: Int,
+    /** Full caption/description when available; often names the song. */
+    val caption: String? = null,
+    /** Track title reported by Instagram's audio metadata, when available. */
+    val track: String? = null,
+    /** Artist reported by Instagram's audio metadata, when available. */
+    val artist: String? = null,
+    /** Album reported by Instagram's audio metadata, when available. */
+    val album: String? = null,
   )
 
   /** One-time native binary setup. Call from Application startup. */
@@ -91,19 +106,39 @@ object ReelMatcher {
   }
 
   /**
-   * Runs the full identification pipeline. All work happens on [Dispatchers.IO].
+   * Runs the identification pipeline. All work happens on [Dispatchers.IO].
    * Throws nothing — every outcome is modelled in [MatchResult].
    */
   suspend fun match(context: Context, reelUrl: String): MatchResult =
     withContext(Dispatchers.IO) {
       if (!isSupportedReelUrl(reelUrl)) return@withContext MatchResult.NotAReel
 
-      val info =
-        fetchReelInfo(reelUrl)
-          ?: return@withContext MatchResult.Error("Reel could not be fetched")
+      val info = fetchReelInfo(reelUrl) ?: return@withContext MatchResult.Error("Reel could not be fetched")
 
-      ReelImportState.report(ReelImportStage.MATCHING)
+      // Stage 1 — metadata: Instagram track fields, then mined caption hints.
+      val metadataQueries = buildList {
+        info.track?.let { track ->
+          add(listOfNotNull(track, info.artist, info.album).joinToString(" ").trim())
+        }
+        addAll(ReelTitleParser.queryCandidates(info.title, info.caption))
+      }
+        .map { it.trim() }
+        .filter { it.isNotBlank() }
+        .distinct()
 
+      if (metadataQueries.isNotEmpty()) {
+        ReelImportState.report(ReelImportStage.MATCHING)
+        for (query in metadataQueries) {
+          val candidates = searchYouTubeMusic(query)
+          if (candidates.isNotEmpty()) {
+            Timber.tag("ReelMatcher").i("Metadata query \"%s\" matched: %s", query, candidates.first().title)
+            return@withContext MatchResult.TitleFallback(candidates, info.title)
+          }
+        }
+      }
+
+      // Stage 2 — audio: fingerprint a short excerpt only when metadata failed.
+      ReelImportState.report(ReelImportStage.EXTRACTING)
       val fingerprintResult = runCatching { recognizeByFingerprint(context, reelUrl) }
       val recognition = fingerprintResult.getOrNull()
 
@@ -112,40 +147,48 @@ object ReelMatcher {
         resolveOnYouTubeMusic(recognition, info.title) ?: fallbackToTitle(info.title, recognition.title)
       } else {
         fingerprintResult.exceptionOrNull()?.let {
-          Timber.tag("ReelMatcher").e(it, "Fingerprinting failed; falling back to title search")
+          Timber.tag("ReelMatcher").e(it, "Fingerprinting failed")
         }
         fallbackToTitle(info.title, null)
       }
     }
 
-  /** Title-based YouTube Music search used when fingerprinting is unavailable. */
+  /** Manual search used by the UI so a failed match never dead-ends the flow. */
+  suspend fun search(query: String): List<SongItem> = searchYouTubeMusic(query.trim())
+
+  /** Title-based YouTube Music search used when the pipeline has nothing better. */
   private suspend fun fallbackToTitle(reelTitle: String, hint: String?): MatchResult {
     val query = ReelTitleParser.clean(reelTitle).ifBlank { hint.orEmpty() }
     val candidates = searchYouTubeMusic(query)
-    return if (candidates.isEmpty()) MatchResult.NoMatch
-    else MatchResult.TitleFallback(candidates, reelTitle)
+    return if (candidates.isEmpty()) MatchResult.NoMatch else MatchResult.TitleFallback(candidates, reelTitle)
   }
 
   /** Fetches reel metadata with yt-dlp (no media download). */
   private suspend fun fetchReelInfo(url: String): ReelInfo? =
     withContext(Dispatchers.IO) {
+      ReelImportState.report(ReelImportStage.FETCHING_METADATA)
       runCatching {
-        val request = YoutubeDLRequest(url)
-        request.addOption("--dump-json")
-        request.addOption("--no-playlist")
-        request.addOption("--socket-timeout", 15)
-        val response = YoutubeDL.getInstance().execute(request)
-        if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
-        // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
-        val json = org.json.JSONObject(response.out)
-        ReelInfo(
-          url = url,
-          title = json.optString("fulltitle").ifBlank { json.optString("title") },
-          uploader = json.optString("uploader").ifBlank { null },
-          thumbnailUrl = json.optString("thumbnail").ifBlank { null },
-          durationSeconds = json.optInt("duration", 0),
-        )
-      }
+          val request = YoutubeDLRequest(url)
+          request.addOption("--dump-json")
+          request.addOption("--no-playlist")
+          request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
+          val response = YoutubeDL.getInstance().execute(request)
+          if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
+          // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
+          val json = org.json.JSONObject(response.out)
+          ReelInfo(
+            url = url,
+            title = json.optString("fulltitle").ifBlank { json.optString("title") },
+            uploader = json.optString("uploader").ifBlank { null },
+            thumbnailUrl = json.optString("thumbnail").ifBlank { null },
+            durationSeconds = json.optInt("duration", 0),
+            // Keep the full caption: song markers like `song:` often sit at the end.
+            caption = json.optString("description").ifBlank { null },
+            track = json.optString("track").ifBlank { null },
+            artist = json.optString("artist").ifBlank { null },
+            album = json.optString("album").ifBlank { null },
+          )
+        }
         .onFailure { Timber.tag("ReelMatcher").e(it, "fetchReelInfo failed for %s", url) }
         .getOrNull()
     }
@@ -168,8 +211,7 @@ object ReelMatcher {
       }
 
     val signature = VibraSignature.fromI16(resampled.data)
-    val sampleDurationMs =
-      (resampled.data.size / 2) * 1000L / VibraSignature.REQUIRED_SAMPLE_RATE
+    val sampleDurationMs = (resampled.data.size / 2) * 1000L / VibraSignature.REQUIRED_SAMPLE_RATE
 
     return com.music.shazamkit.Shazam.recognize(signature, sampleDurationMs).getOrNull()
   }
@@ -192,7 +234,10 @@ object ReelMatcher {
         request.addOption("-o", outFile.absolutePath.substringBeforeLast(".pcm") + ".%(ext)s")
         request.addOption("--no-playlist")
         request.addOption("--no-part")
-        request.addOption("--socket-timeout", 15)
+        request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
+        // Public reels are usually downloadable anonymously; private ones are not.
+        request.addOption("--no-check-certificates")
+        request.addOption("--user-agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
 
         // The library injects --ffmpeg-location automatically for every execution.
         YoutubeDL.getInstance().execute(request)

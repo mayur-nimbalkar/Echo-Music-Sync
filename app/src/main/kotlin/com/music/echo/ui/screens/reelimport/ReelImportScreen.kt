@@ -23,6 +23,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -119,6 +120,8 @@ fun ReelImportScreen(
 
         is ReelImportUiState.Working -> WorkingContent(state.stage)
 
+        is ReelImportUiState.Searching -> SearchingContent(state.query)
+
         is ReelImportUiState.AwaitingConfirmation ->
           ConfirmationContent(
             song = state.song,
@@ -133,6 +136,8 @@ fun ReelImportScreen(
         is ReelImportUiState.PickCandidate ->
           CandidatePickerContent(
             candidates = state.candidates,
+            reelTitle = state.reelTitle,
+            onSearch = { query -> viewModel.manualSearch(query) },
             onPick = { song ->
               // No default set: let the user choose a playlist for this song.
               if (defaultPlaylistId.isBlank()) openPlaylistPicker(song)
@@ -340,11 +345,35 @@ private fun ConfirmationContent(
 }
 
 @Composable
+private fun SearchingContent(query: String) {
+  Column(
+    horizontalAlignment = Alignment.CenterHorizontally,
+    verticalArrangement = Arrangement.spacedBy(24.dp),
+  ) {
+    CircularProgressIndicator(
+      modifier = Modifier.size(96.dp),
+      strokeWidth = 6.dp,
+      color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(
+      text = stringResource(R.string.reel_import_searching, query),
+      style = MaterialTheme.typography.titleLarge,
+      color = MaterialTheme.colorScheme.onSurface,
+      textAlign = TextAlign.Center,
+    )
+  }
+}
+
+@Composable
 private fun CandidatePickerContent(
   candidates: List<SongItem>,
+  reelTitle: String,
+  onSearch: (String) -> Unit,
   onPick: (SongItem) -> Unit,
   onDismiss: () -> Unit,
 ) {
+  var searchText by remember { mutableStateOf("") }
+
   Column(
     modifier = Modifier.fillMaxWidth(),
     horizontalAlignment = Alignment.CenterHorizontally,
@@ -356,31 +385,64 @@ private fun CandidatePickerContent(
       color = MaterialTheme.colorScheme.onSurface,
       textAlign = TextAlign.Center,
     )
-    Text(
-      text = stringResource(R.string.reel_import_original_audio),
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    LazyColumn(
-      modifier = Modifier.fillMaxWidth().height(340.dp),
-      verticalArrangement = Arrangement.spacedBy(8.dp),
+    if (candidates.isEmpty()) {
+      Text(
+        text = stringResource(R.string.reel_import_search_manually_hint),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+      )
+    } else {
+      Text(
+        text = stringResource(R.string.reel_import_original_audio),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.fillMaxWidth(),
     ) {
-      itemsIndexed(candidates) { index, song ->
-        ListItem(
-          title = song.title,
-          subtitle = { Text(song.artists.joinToString { it.name }) },
-          thumbnailContent = {
-            AsyncImage(
-              model = song.thumbnail,
-              contentDescription = null,
-              contentScale = ContentScale.Crop,
-              modifier = Modifier.size(ListThumbnailSize).clip(RoundedCornerShape(8.dp)),
-            )
-          },
-          shape = listItemShape(index = index, count = candidates.size),
-          modifier = Modifier.clickable { onPick(song) },
-          color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-        )
+      OutlinedTextField(
+        value = searchText,
+        onValueChange = { searchText = it },
+        placeholder = { Text(stringResource(R.string.reel_import_search_hint)) },
+        singleLine = true,
+        modifier = Modifier.weight(1f),
+      )
+      Spacer(Modifier.width(8.dp))
+      Button(
+        onClick = {
+          onSearch(searchText)
+          searchText = ""
+        },
+        enabled = searchText.isNotBlank(),
+      ) {
+        Text(stringResource(R.string.reel_import_search_action))
+      }
+    }
+    if (candidates.isNotEmpty()) {
+      LazyColumn(
+        modifier = Modifier.fillMaxWidth().height(340.dp),
+        verticalArrangement = Arrangement.spacedBy(8.dp),
+      ) {
+        itemsIndexed(candidates) { index, song ->
+          ListItem(
+            title = song.title,
+            subtitle = { Text(song.artists.joinToString { it.name }) },
+            thumbnailContent = {
+              AsyncImage(
+                model = song.thumbnail,
+                contentDescription = null,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(ListThumbnailSize).clip(RoundedCornerShape(8.dp)),
+              )
+            },
+            shape = listItemShape(index = index, count = candidates.size),
+            modifier = Modifier.clickable { onPick(song) },
+            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+          )
+        }
       }
     }
     TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }

@@ -37,8 +37,11 @@ sealed class ReelImportUiState {
     val reelTitle: String,
   ) : ReelImportUiState()
 
-  /** Fingerprinting failed; the user picks manually from title-based candidates. */
+  /** Metadata/caption candidates, or an empty list the user can extend by manual search. */
   data class PickCandidate(val candidates: List<SongItem>, val reelTitle: String) : ReelImportUiState()
+
+  /** While a manual/inline search is running. */
+  data class Searching(val query: String) : ReelImportUiState()
 
   data class Finished(val playlistName: String?) : ReelImportUiState()
   data class Failed(val reason: ReelImportStage) : ReelImportUiState()
@@ -120,7 +123,8 @@ constructor(
         ReelMatcher.MatchResult.NotAReel ->
           _uiState.value = ReelImportUiState.Failed(ReelImportStage.NOT_A_REEL)
         ReelMatcher.MatchResult.NoMatch ->
-          _uiState.value = ReelImportUiState.Failed(ReelImportStage.NO_MATCH)
+          // Nothing matched — show the manual search picker instead of a dead end.
+          _uiState.value = ReelImportUiState.PickCandidate(emptyList(), "")
         is ReelMatcher.MatchResult.Error ->
           _uiState.value =
             ReelImportUiState.Failed(
@@ -146,6 +150,27 @@ constructor(
 
   /** User picked a candidate from the title fallback list. */
   fun pickCandidate(song: SongItem, playlistId: String?) = confirm(song, playlistId)
+
+  /**
+   * Manual search from the candidate picker. Replaces the candidate list so the user
+   * can refine repeatedly without leaving the flow. Also lets the user search when
+   * automatic identification found nothing.
+   */
+  fun manualSearch(query: String) {
+    val trimmed = query.trim()
+    if (trimmed.isEmpty()) return
+    viewModelScope.launch(Dispatchers.IO) {
+      _uiState.value = ReelImportUiState.Searching(trimmed)
+      val candidates = ReelMatcher.search(trimmed)
+      _uiState.value =
+        if (candidates.isEmpty()) {
+          // Stay in the picker so the user can refine the search — never a dead end.
+          ReelImportUiState.PickCandidate(emptyList(), trimmed)
+        } else {
+          ReelImportUiState.PickCandidate(candidates, trimmed)
+        }
+    }
+  }
 
   fun setDefaultPlaylist(id: String) {
     defaultPlaylistId.value = id
