@@ -33,8 +33,8 @@ android {
     applicationId = "echo.music.iad1tya"
     minSdk = 26
     targetSdk = 36
-    versionCode = 164
-    versionName = "1.4.3"
+    versionCode = 165
+    versionName = "1.4.4"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true

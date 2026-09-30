@@ -56,6 +56,16 @@ object ReelTitleParser {
   /** Unicode quotes wrapping explicit song hints. */
   private val QUOTED = Regex("[\"“”„«»'‘’]([^\"“”„«»'‘’]{3,80})[\"“”„«»'‘’]")
 
+  /**
+   * Generic non-song lines: yt-dlp placeholder titles ("Video by user", "Instagram video
+   * by user"), boilerplate headings, disclaimers and follow-me pleas. Never good queries.
+   */
+  private val GENERIC_LINE =
+    Regex(
+      "^(?:video|reel|post|instagram|ig)(?:\\s+(?:by|from|of)\\s+.+)?$|^song\\s+credits?.*$|^lyrics?.*$|^credits?.*$|^disclaimer.*$|^follow.*$|^song\\s+credits?\\s*_+\\s*$",
+      RegexOption.IGNORE_CASE,
+    )
+
   private val TRIM_CHARS = "\"“”'‘’ \n\r\t♪♫🎵🎶"
 
   /** Extracts the first URL from arbitrary share text, or null when none exists. */
@@ -95,12 +105,29 @@ object ReelTitleParser {
   }
 
   /**
-   * Generates ordered, de-duplicated YouTube Music search queries from reel metadata.
-   * The first entries are the most specific song hints; the last is the cleaned title
-   * as a generic fallback, so the list is never empty when [clean] isn't either.
+   * Ordered, de-duplicated search queries from reel metadata — the legacy flat view.
+   * Strong hints first, then weak ones (see [rankedQueryCandidates]).
    */
   fun queryCandidates(rawTitle: String?, caption: String? = null): List<String> {
-    val results = LinkedHashSet<String>()
+    val (strong, weak) = rankedQueryCandidates(rawTitle, caption)
+    return strong + weak
+  }
+
+  /**
+   * Strong/weak split of search queries mined from reel metadata.
+   *
+   * Strong = identifies a song on its own: explicit `song:` markers, ♪/🎵 fragments,
+   * quoted phrases, and Instagram's audio track/artist fields. Weak = everything else
+   * (caption lines, cleaned title) — names the song far less reliably. The matcher runs
+   * strong queries before audio fingerprinting and weak ones only after it, so a junky
+   * caption can never win over the reel's actual audio.
+   *
+   * Generic lines — yt-dlp's "Video by user" placeholder, credit-block headings,
+   * disclaimers, follow-me pleas — are dropped entirely.
+   */
+  fun rankedQueryCandidates(rawTitle: String?, caption: String? = null): Pair<List<String>, List<String>> {
+    val strong = LinkedHashSet<String>()
+    val weak = LinkedHashSet<String>()
 
     val combined = listOfNotNull(rawTitle?.trim()?.takeIf { it.isNotBlank() }, caption?.trim()?.takeIf { it.isNotBlank() })
       .joinToString("\n")
@@ -113,7 +140,7 @@ object ReelTitleParser {
         // Stop the hint at the next marker or line break.
         value = value.lineSequence().firstOrNull { it.isNotBlank() } ?: ""
         val stripped = sanitizeQuery(value)
-        if (stripped.isNotBlank()) results.add(stripped)
+        if (stripped.isNotBlank()) strong.add(stripped)
       }
     }
 
@@ -123,24 +150,27 @@ object ReelTitleParser {
       val end = MUSIC_EMOJI_DELIMITER.find(combined, startIndex = start)?.range?.first ?: combined.length
       val fragment = combined.substring(start, if (end >= 0) end else combined.length)
       val stripped = sanitizeQuery(fragment)
-      if (stripped.isNotBlank()) results.add(stripped)
+      if (stripped.isNotBlank()) strong.add(stripped)
     }
 
     // 3. Quoted fragments — creators quote lyric or song lines.
     QUOTED.findAll(combined).forEach { match ->
       val stripped = sanitizeQuery(match.groupValues[1])
-      if (stripped.isNotBlank()) results.add(stripped)
+      if (stripped.isNotBlank()) strong.add(stripped)
     }
 
-    // 4. Caption lines and the cleaned title as progressively generic candidates.
+    // 4. Weak: caption lines and the cleaned title.
     caption?.lineSequence()?.forEach { line ->
       val stripped = sanitizeQuery(line)
-      if (stripped.isNotBlank()) results.add(stripped)
+      if (stripped.isNotBlank() && !GENERIC_LINE.containsMatchIn(stripped)) weak.add(stripped)
     }
     val cleanedTitle = clean(rawTitle)
-    if (cleanedTitle.isNotBlank()) results.add(sanitizeQuery(cleanedTitle))
+    if (cleanedTitle.isNotBlank()) {
+      val stripped = sanitizeQuery(cleanedTitle)
+      if (stripped.isNotBlank() && !GENERIC_LINE.containsMatchIn(stripped)) weak.add(stripped)
+    }
 
-    return results.toList().take(5)
+    return strong.toList() to weak.toList()
   }
 
   /** Cleans one candidate line: strips noise prefixes, tags, emojis and extra quotes. */

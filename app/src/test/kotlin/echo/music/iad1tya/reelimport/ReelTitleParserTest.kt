@@ -140,4 +140,51 @@ class ReelTitleParserTest {
     // The movie title stays a candidate (weak), but the label itself is stripped.
     assertTrue(candidates.all { !it.startsWith("Movie") })
   }
+
+  @Test
+  fun `placeholder title and caption noise are weak, not strong`() {
+    // Typical reel where Instagram gives no track info and the caption is noise:
+    // nothing here may count as a strong hint that would win over fingerprinting.
+    val (strong, weak) =
+      ReelTitleParser.rankedQueryCandidates(
+        "Video by abdulrehmankolsawala123",
+        "Breathless song\n.\n.\n#instagram #trending #reel #viral #song",
+      )
+    assertTrue(strong.isEmpty())
+    assertTrue(weak.isNotEmpty())
+  }
+
+  @Test
+  fun `placeholder video-by title is dropped entirely`() {
+    val (_, weak) = ReelTitleParser.rankedQueryCandidates("Video by some_user", null)
+    assertTrue(weak.none { it.startsWith("Video by") })
+  }
+
+  @Test
+  fun `credit headings and disclaimers are dropped`() {
+    val (_, weak) =
+      ReelTitleParser.rankedQueryCandidates(
+        null,
+        "✨ Song Credits________\n📌 Disclaimer :-\nsong: Real Song Name",
+      )
+    assertTrue(weak.none { it.contains("Credits") })
+    assertTrue(weak.none { it.startsWith("Disclaimer") })
+  }
+
+  @Test
+  fun `song marker is a strong hint`() {
+    val (strong, _) = ReelTitleParser.rankedQueryCandidates(null, "song: Kesariya - Arijit Singh")
+    assertEquals(listOf("Kesariya - Arijit Singh"), strong)
+  }
+
+  @Test
+  fun `foreign caption without markers stays weak`() {
+    val (strong, _) =
+      ReelTitleParser.rankedQueryCandidates(
+        "Video by queen_meghna_9876",
+        "的现场表演。以独特时尚造型而闻名的他,这次依旧保持一贯的高级感",
+      )
+    assertTrue(strong.isEmpty())
+    // The line itself may be kept as a weak fallback, but never as strong.
+  }
 }
