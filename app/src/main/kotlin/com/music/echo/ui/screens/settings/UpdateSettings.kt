@@ -41,7 +41,6 @@ import echo.music.iad1tya.echomusic.updater.autoClearOldApks
 import echo.music.iad1tya.echomusic.updater.getAutoUpdateCheckSetting
 import echo.music.iad1tya.echomusic.updater.getBetaUpdatesSetting
 import echo.music.iad1tya.echomusic.updater.getDownloadedApkCount
-import echo.music.iad1tya.echomusic.updater.getUpdateAvailableState
 import echo.music.iad1tya.echomusic.updater.getUpdateNotificationsSetting
 import echo.music.iad1tya.ui.component.IconButton
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
@@ -74,7 +73,6 @@ fun UpdateSettings(
     mutableStateOf(getUpdateNotificationsSetting(context))
   }
   var betaUpdatesEnabled by remember { mutableStateOf(getBetaUpdatesSetting(context)) }
-  val isUpdateAvailable = getUpdateAvailableState(context) && autoUpdateEnabled
   var apkCount by remember { mutableStateOf(getDownloadedApkCount(context)) }
   var showInfoDialog by remember { mutableStateOf(false) }
   var releaseNotes by remember { mutableStateOf<String?>(null) }
@@ -123,14 +121,7 @@ fun UpdateSettings(
             icon = painterResource(R.drawable.update),
             title = { Text(stringResource(R.string.system_update)) },
             description = {
-              if (isUpdateAvailable) {
-                Text(
-                  text = "New update is available",
-                  color = androidx.compose.ui.graphics.Color.Red
-                )
-              } else {
-                Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
-              }
+              Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
             },
             onClick = {
               val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://echomusic.fun"))

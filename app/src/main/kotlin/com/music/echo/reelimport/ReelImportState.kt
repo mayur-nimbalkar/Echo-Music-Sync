@@ -32,6 +32,8 @@ object ReelImportState {
     val reelTitle: String = "",
     val reelThumbnailUrl: String? = null,
     val stage: ReelImportStage = ReelImportStage.FETCHING_METADATA,
+    /** Query currently being searched on YouTube Music, when in [ReelImportStage.MATCHING]. */
+    val searchQuery: String? = null,
   )
 
   private val _current = MutableStateFlow<PendingImport?>(null)

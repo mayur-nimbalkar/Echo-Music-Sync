@@ -19,6 +19,17 @@ object ReelTitleParser {
   /** Hashtags and @mentions are noise for a YouTube Music search. */
   private val TAGS_AND_MENTIONS = Regex("(?:^|\\s)[#@][\\p{L}\\p{N}_]+")
 
+  /**
+   * Song-credit label prefixes found in caption credit blocks, e.g. `Song Name : Yeh Ishq Hai`
+   * or `Music / Composer : Pritam`. Only known label words are stripped, so genuine
+   * `Title: Artist` captions are left alone.
+   */
+  private val CREDIT_LABEL =
+    Regex(
+      "^(?:(?:song|music|audio|track|movie|film|singers?|vocals?|composer|lyrics?|lyricist|album|label|artist|title)(?:\\s+name)?\\s*(?:[/&|]\\s*(?:song|music|audio|track|movie|film|singers?|vocals?|composer|lyrics?|lyricist|album|label|artist|title)(?:\\s+name)?\\s*)*[:\u2013\u2014-]\\s*)+",
+      RegexOption.IGNORE_CASE,
+    )
+
   /** Common caption prefixes that carry no song information. */
   private val NOISE_PREFIX =
     Regex(
@@ -142,10 +153,18 @@ object ReelTitleParser {
         break
       }
     }
-    value = NOISE_PREFIX.replace(value, "")
-    value = TAGS_AND_MENTIONS.replace(value, " ")
     value = EMOJI_AND_SYMBOLS.replace(value, " ")
     value = value.trim(*TRIM_CHARS.toCharArray())
+    // Peel stacked credit labels ("Song Name : Music : X" → "X"), including ones that
+    // were only visible after emoji removal ("🎬 Movie Name : X" → "X"). Anchored,
+    // so it only runs after trimming.
+    while (true) {
+      val stripped = CREDIT_LABEL.replace(value, "")
+      if (stripped == value) break
+      value = stripped
+    }
+    value = NOISE_PREFIX.replace(value, "")
+    value = TAGS_AND_MENTIONS.replace(value, " ")
     value = value.replace(Regex("\\s+"), " ").trim()
     return if (value.length < 3) "" else value
   }

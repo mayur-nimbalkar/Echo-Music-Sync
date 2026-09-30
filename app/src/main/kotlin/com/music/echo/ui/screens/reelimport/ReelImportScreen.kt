@@ -118,7 +118,7 @@ fun ReelImportScreen(
       when (val state = uiState) {
         is ReelImportUiState.Idle -> IdleContent()
 
-        is ReelImportUiState.Working -> WorkingContent(state.stage)
+        is ReelImportUiState.Working -> WorkingContent(state.stage, state.searchQuery)
 
         is ReelImportUiState.Searching -> SearchingContent(state.query)
 
@@ -231,7 +231,7 @@ private fun IdleContent() {
 }
 
 @Composable
-private fun WorkingContent(stage: ReelImportStage) {
+private fun WorkingContent(stage: ReelImportStage, searchQuery: String? = null) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(24.dp),
@@ -243,15 +243,21 @@ private fun WorkingContent(stage: ReelImportStage) {
     )
     Text(
       text =
-        when (stage) {
-          ReelImportStage.EXTRACTING -> stringResource(R.string.reel_import_extracting_audio)
-          ReelImportStage.LISTENING -> stringResource(R.string.reel_import_listening)
-          ReelImportStage.MATCHING -> stringResource(R.string.reel_import_matching)
-          ReelImportStage.ADDING -> stringResource(R.string.reel_import_add_to_playlist)
-          else -> stringResource(R.string.reel_import_fetching_metadata)
+        if (stage == ReelImportStage.MATCHING && !searchQuery.isNullOrBlank()) {
+          // Show what is being searched so a slow stage is never a blind spinner.
+          stringResource(R.string.reel_import_searching, searchQuery)
+        } else {
+          when (stage) {
+            ReelImportStage.EXTRACTING -> stringResource(R.string.reel_import_extracting_audio)
+            ReelImportStage.LISTENING -> stringResource(R.string.reel_import_listening)
+            ReelImportStage.MATCHING -> stringResource(R.string.reel_import_matching)
+            ReelImportStage.ADDING -> stringResource(R.string.reel_import_add_to_playlist)
+            else -> stringResource(R.string.reel_import_fetching_metadata)
+          }
         },
       style = MaterialTheme.typography.titleLarge,
       color = MaterialTheme.colorScheme.onSurface,
+      textAlign = TextAlign.Center,
     )
   }
 }
@@ -373,6 +379,15 @@ private fun CandidatePickerContent(
   onDismiss: () -> Unit,
 ) {
   var searchText by remember { mutableStateOf("") }
+
+  // Nothing found automatically: start the manual search from the best song hint
+  // mined from the caption, so the user corrects it in one tap instead of typing
+  // from scratch.
+  LaunchedEffect(candidates.isEmpty(), reelTitle) {
+    if (candidates.isEmpty() && searchText.isBlank() && reelTitle.isNotBlank()) {
+      searchText = reelTitle
+    }
+  }
 
   Column(
     modifier = Modifier.fillMaxWidth(),

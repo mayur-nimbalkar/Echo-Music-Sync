@@ -2,6 +2,7 @@ package echo.music.iad1tya.reelimport
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class ReelTitleParserTest {
@@ -95,5 +96,48 @@ class ReelTitleParserTest {
   @Test
   fun `empty metadata yields empty candidates`() {
     assertEquals(emptyList<String>(), ReelTitleParser.queryCandidates(null, null))
+  }
+
+  @Test
+  fun `song credit label is stripped from caption line`() {
+    val caption = "Some intro text\n\n🎵 Song Name : Yeh Ishq Hai\n🎬 Movie Name : Jab We Met (2007)"
+    val candidates = ReelTitleParser.queryCandidates(null, caption)
+    assertEquals("Yeh Ishq Hai", candidates.first())
+  }
+
+  @Test
+  fun `stacked credit labels are peeled`() {
+    assertEquals(
+      "Pritam",
+      ReelTitleParser.extractSongHint("Music / Composer : Pritam", null),
+    )
+  }
+
+  @Test
+  fun `real credits caption mines the song first`() {
+    val caption =
+      "“Yeh Ishq Hai” is a popular song from the Bollywood film “Jab We Met” . It was released in 2007and composed by Pritam .\n\n" +
+        "✨ Song Credits________\n" +
+        "🎵 Song Name : Yeh Ishq Hai\n" +
+        "🎬 Movie Name : Jab We Met (2007)\n" +
+        "🎙️ Singers : Shreya Ghoshal\n" +
+        "🎼 Music / Composer : Pritam\n" +
+        "📝 Lyrics / Lyricist : Irshad Kamil\n" +
+        "👥 Actors picturised : Kareena Kapoor Khan, Shahid Kapoor\n" +
+        "📀 Music Label : T-Series\n\n" +
+        "#YehIshqHai #JabWeMet #KareenaKapoor #ShahidKapoor #ShreyaGhoshal"
+    val candidates = ReelTitleParser.queryCandidates("Video by my.playlistshare", caption)
+    assertEquals("Yeh Ishq Hai", candidates.first())
+    // Caption lines like the movie/actor credits follow as weaker candidates.
+    assertTrue(candidates.any { it.contains("Jab We Met") })
+    // The credit label itself must never leak into a query.
+    assertTrue(candidates.none { it.startsWith("Song Name") })
+  }
+
+  @Test
+  fun `movie credit line is not confused with a song`() {
+    val candidates = ReelTitleParser.queryCandidates(null, "🎬 Movie Name : Jab We Met (2007)")
+    // The movie title stays a candidate (weak), but the label itself is stripped.
+    assertTrue(candidates.all { !it.startsWith("Movie") })
   }
 }

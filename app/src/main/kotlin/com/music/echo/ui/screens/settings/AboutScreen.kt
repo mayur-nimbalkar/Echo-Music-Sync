@@ -197,12 +197,6 @@ fun AboutScreen(
           items =
             listOf(
               Material3SettingsItem(
-                icon = painterResource(R.drawable.coffee),
-                title = { Text("Buy Me a Coffee") },
-                description = { Text("buymeacoffee.com/iad1tya") },
-                onClick = { uriHandler.openUri("https://buymeacoffee.com/iad1tya") }
-              ),
-              Material3SettingsItem(
                 icon = painterResource(R.drawable.ic_patreon_new),
                 title = { Text("Patreon") },
                 description = { Text("patreon.com/cw/iad1tya") },

@@ -29,7 +29,11 @@ import kotlinx.coroutines.launch
 /** UI-facing state of the reel import flow. */
 sealed class ReelImportUiState {
   data object Idle : ReelImportUiState()
-  data class Working(val stage: ReelImportStage) : ReelImportUiState()
+  data class Working(
+    val stage: ReelImportStage,
+    /** Live YouTube Music query while in [ReelImportStage.MATCHING], if any. */
+    val searchQuery: String? = null,
+  ) : ReelImportUiState()
 
   data class AwaitingConfirmation(
     val song: SongItem,
@@ -84,7 +88,7 @@ constructor(
             stage == ReelImportStage.MATCHING
         ) {
           if (_uiState.value is ReelImportUiState.Idle || _uiState.value is ReelImportUiState.Working) {
-            _uiState.value = ReelImportUiState.Working(stage)
+            _uiState.value = ReelImportUiState.Working(stage, pending.searchQuery)
           }
         }
       }
@@ -119,6 +123,8 @@ constructor(
             )
         }
         is ReelMatcher.MatchResult.TitleFallback ->
+          // Empty songs list = nothing found; reelTitle then carries the best mined hint
+          // so the manual-search box starts prefilled instead of blank.
           _uiState.value = ReelImportUiState.PickCandidate(result.songs, result.reelTitle)
         ReelMatcher.MatchResult.NotAReel ->
           _uiState.value = ReelImportUiState.Failed(ReelImportStage.NOT_A_REEL)
