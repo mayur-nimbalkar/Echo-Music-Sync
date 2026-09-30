@@ -1685,12 +1685,6 @@ fun getAllSearchableSettings(): List<SearchableSetting> {
       "settings/storage"
     ),
     SearchableSetting(
-      stringResource(R.string.update_available),
-      stringResource(R.string.update_available_desc),
-      "System Update",
-      "settings/update"
-    ),
-    SearchableSetting(
       stringResource(R.string.update_notifications),
       stringResource(R.string.update_notifications_subtitle),
       "System Update",
@@ -2277,7 +2271,6 @@ fun getAllSearchableSettings(): List<SearchableSetting> {
     SearchableSetting("Website", "Visit the Echo Music website", "About", "settings/about"),
     SearchableSetting("Instagram", "Follow Echo Music on Instagram", "About", "settings/about"),
     SearchableSetting("X (Twitter)", "Follow Echo Music on X", "About", "settings/about"),
-    SearchableSetting("Buy Me a Coffee", "Support the developer", "About", "settings/about"),
     SearchableSetting("Patreon", "Support the developer on Patreon", "About", "settings/about"),
     SearchableSetting("UPI", "Support the developer via UPI", "About", "settings/about"),
     SearchableSetting("Discord", "Join the Echo Music community", "About", "settings/about"),

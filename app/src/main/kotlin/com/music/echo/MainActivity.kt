@@ -178,11 +178,6 @@ import echo.music.iad1tya.constants.*
 import echo.music.iad1tya.constants.UseNewMiniPlayerDesignKey
 import echo.music.iad1tya.db.MusicDatabase
 import echo.music.iad1tya.db.entities.SearchHistory
-import echo.music.iad1tya.echomusic.UpdateNotificationHelper
-import echo.music.iad1tya.echomusic.updater.checkForUpdate
-import echo.music.iad1tya.echomusic.updater.getAutoUpdateCheckSetting
-import echo.music.iad1tya.echomusic.updater.getUpdateNotificationsSetting
-import echo.music.iad1tya.echomusic.updater.saveUpdateAvailableState
 import echo.music.iad1tya.extensions.toEnum
 import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.playback.DownloadUtil
@@ -475,18 +470,6 @@ class MainActivity : ComponentActivity() {
     val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
     val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
     val context = LocalContext.current
-    var showUpdateDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
-    var availableUpdateVersion by remember { androidx.compose.runtime.mutableStateOf("") }
-    var availableUpdateChangelog by remember {
-      androidx.compose.runtime.mutableStateOf<
-        List<echo.music.iad1tya.echomusic.updater.ChangelogSection>
-      >(
-        emptyList()
-      )
-    }
-    var availableUpdateDescription by remember {
-      androidx.compose.runtime.mutableStateOf<String?>(null)
-    }
     var whatsNewInfo by remember {
       androidx.compose.runtime.mutableStateOf<echo.music.iad1tya.echomusic.updater.WhatsNewInfo?>(
         null
@@ -515,39 +498,6 @@ class MainActivity : ComponentActivity() {
         // onDismiss below) — if the fetch fails here, retry on the next launch
         // instead of losing that version's release notes forever.
         whatsNewInfo = echo.music.iad1tya.echomusic.updater.fetchChangelogForVersion(currentVersion)
-      }
-    }
-
-    LaunchedEffect(Unit) {
-      val prefs = context.dataStore.data.first()
-
-      if (getAutoUpdateCheckSetting(context)) {
-
-        delay(2000L)
-        checkForUpdate(
-          context = context,
-          onSuccess = { latestVersion, isAvailable, changelog, _, _, description, _, _ ->
-            val currentVersion = BuildConfig.VERSION_NAME
-            Log.d(
-              "UpdateCheck",
-              "Startup check success. Latest: $latestVersion, Current: $currentVersion, isAvailable: $isAvailable"
-            )
-            saveUpdateAvailableState(context, isAvailable)
-
-            if (isAvailable) {
-              availableUpdateVersion = latestVersion
-              availableUpdateChangelog = changelog
-              availableUpdateDescription = description
-              showUpdateDialog = true
-            }
-
-            if (isAvailable && getUpdateNotificationsSetting(context)) {
-              Log.d("UpdateCheck", "Posting update notification for $latestVersion")
-              UpdateNotificationHelper.showUpdateNotification(context, latestVersion)
-            }
-          },
-          onError = { Log.e("UpdateCheck", "Startup check failed") }
-        )
       }
     }
 
@@ -648,27 +598,18 @@ class MainActivity : ComponentActivity() {
       pureBlack = pureBlack,
       themeColor = themeColor,
     ) {
-      if (showUpdateDialog) {
-        echo.music.iad1tya.echomusic.component.UpdateAvailableDialog(
-          version = availableUpdateVersion,
-          changelog = availableUpdateChangelog,
-          description = availableUpdateDescription,
-          onDismiss = { showUpdateDialog = false }
+      whatsNewInfo?.let { info ->
+        echo.music.iad1tya.echomusic.updater.WhatsNewDialog(
+          version = BuildConfig.VERSION_NAME,
+          info = info,
+          onDismiss = {
+            echo.music.iad1tya.echomusic.updater.saveLastSeenChangelogVersion(
+              context,
+              BuildConfig.VERSION_NAME,
+            )
+            whatsNewInfo = null
+          }
         )
-      } else {
-        whatsNewInfo?.let { info ->
-          echo.music.iad1tya.echomusic.updater.WhatsNewDialog(
-            version = BuildConfig.VERSION_NAME,
-            info = info,
-            onDismiss = {
-              echo.music.iad1tya.echomusic.updater.saveLastSeenChangelogVersion(
-                context,
-                BuildConfig.VERSION_NAME,
-              )
-              whatsNewInfo = null
-            }
-          )
-        }
       }
       BoxWithConstraints(
         modifier =

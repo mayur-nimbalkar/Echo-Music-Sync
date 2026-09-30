@@ -82,13 +82,6 @@ fun WelcomeDialog(onDismissRequest: () -> Unit) {
 
         WelcomeSectionCard(title = "Support Echo") {
           WelcomeActionRow(
-            icon = painterResource(R.drawable.coffee),
-            title = "Buy Me a Coffee",
-            subtitle = "buymeacoffee.com/iad1tya",
-            onClick = { uriHandler.openUri("https://buymeacoffee.com/iad1tya") }
-          )
-          WelcomeDivider()
-          WelcomeActionRow(
             icon = painterResource(R.drawable.ic_patreon_new),
             title = "Patreon",
             subtitle = "patreon.com/cw/iad1tya",

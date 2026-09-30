@@ -17,6 +17,8 @@ import java.nio.ByteBuffer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.time.Duration.Companion.seconds
 import timber.log.Timber
 
 /**
@@ -45,6 +47,15 @@ object ReelMatcher {
 
   /** yt-dlp network timeouts in seconds. */
   private const val SOCKET_TIMEOUT_SECONDS = 15
+
+  /** yt-dlp retry cap — the default of 10 turns dead networks into minute-long hangs. */
+  private const val YTDLP_RETRIES = 3
+
+  /** Hard wall-clock budget for one YouTube Music search (including InnerTube's internal retries). */
+  private const val SEARCH_TIMEOUT_SECONDS = 15L
+
+  /** Metadata queries tried before the pipeline gives up on search-only identification. */
+  private const val MAX_METADATA_QUERIES = 3
 
   /** Reel URLs accepted by the importer. */
   private val REEL_URL_REGEX =
@@ -133,41 +144,65 @@ object ReelMatcher {
         .map { it.trim() }
         .filter { it.isNotBlank() }
         .distinct()
+        .take(MAX_METADATA_QUERIES)
 
+      var searchFailed = false
       if (metadataQueries.isNotEmpty()) {
         ReelImportState.report(ReelImportStage.MATCHING)
         for (query in metadataQueries) {
+          // Show the live query so long stages are never a blind spinner.
+          ReelImportState.update { it.copy(searchQuery = query) }
           val candidates = searchYouTubeMusic(query)
-          if (candidates.isNotEmpty()) {
-            Timber.tag("ReelMatcher").i("Metadata query \"%s\" matched: %s", query, candidates.first().title)
-            return@withContext MatchResult.TitleFallback(candidates, info.title)
+          when {
+            candidates == null -> searchFailed = true // network/timeout — emptiness proves nothing
+            candidates.isNotEmpty() -> {
+              Timber.tag("ReelMatcher").i("Metadata query \"%s\" matched: %s", query, candidates.first().title)
+              return@withContext MatchResult.TitleFallback(candidates, info.title)
+            }
           }
         }
       }
 
       // Stage 2 — audio: fingerprint a short excerpt only when metadata failed.
-      ReelImportState.report(ReelImportStage.EXTRACTING)
-      val fingerprintResult = runCatching { recognizeByFingerprint(context, reelUrl) }
-      val recognition = fingerprintResult.getOrNull()
+      // Skipped when YouTube Music itself is unreachable: a fingerprint match still needs
+      // a YT Music resolve, so this would only add minutes to the same failure.
+      if (!searchFailed) {
+        ReelImportState.report(ReelImportStage.EXTRACTING)
+        val fingerprintResult = runCatching { recognizeByFingerprint(context, reelUrl) }
+        val recognition = fingerprintResult.getOrNull()
 
-      if (recognition != null) {
-        // Prefer the fingerprint match resolved on YouTube Music.
-        resolveOnYouTubeMusic(recognition, info.title) ?: fallbackToTitle(info.title, recognition.title)
-      } else {
-        fingerprintResult.exceptionOrNull()?.let {
-          Timber.tag("ReelMatcher").e(it, "Fingerprinting failed")
+        if (recognition != null) {
+          // Prefer the fingerprint match resolved on YouTube Music.
+          val resolved = resolveOnYouTubeMusic(recognition, info.title)
+          if (resolved != null) return@withContext resolved
+          val fb = fallbackToTitle(info.title, recognition.title)
+          if (fb is MatchResult.TitleFallback) return@withContext fb
+        } else {
+          fingerprintResult.exceptionOrNull()?.let {
+            Timber.tag("ReelMatcher").e(it, "Fingerprinting failed")
+          }
+          val fb = fallbackToTitle(info.title, null)
+          if (fb is MatchResult.TitleFallback) return@withContext fb
         }
-        fallbackToTitle(info.title, null)
+      } else {
+        Timber.tag("ReelMatcher").w("YouTube Music unreachable — skipping extraction/fingerprinting")
       }
+
+      // Stage 3 — never dead-end: hand the best mined hint to the picker, prefilled
+      // into the manual search box so the user can correct it in one tap. (When searches
+      // succeeded, the cleaned-title query has already been tried and was empty.)
+      val hint = metadataQueries.firstOrNull().orEmpty()
+      MatchResult.TitleFallback(emptyList(), hint.ifBlank { info.title })
     }
 
   /** Manual search used by the UI so a failed match never dead-ends the flow. */
   suspend fun search(query: String): List<SongItem> = searchYouTubeMusic(query.trim())
 
   /** Title-based YouTube Music search used when the pipeline has nothing better. */
-  private suspend fun fallbackToTitle(reelTitle: String, hint: String?): MatchResult {
+  private suspend fun fallbackToTitle(reelTitle: String, hint: String?): MatchResult? {
     val query = ReelTitleParser.clean(reelTitle).ifBlank { hint.orEmpty() }
-    val candidates = searchYouTubeMusic(query)
+    if (query.isBlank()) return null
+    val candidates = searchYouTubeMusic(query).orEmpty()
     return if (candidates.isEmpty()) MatchResult.NoMatch else MatchResult.TitleFallback(candidates, reelTitle)
   }
 
@@ -180,6 +215,7 @@ object ReelMatcher {
           request.addOption("--dump-json")
           request.addOption("--no-playlist")
           request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
+          request.addOption("--retries", YTDLP_RETRIES)
           val response = YoutubeDL.getInstance().execute(request)
           if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
           // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
@@ -249,6 +285,7 @@ object ReelMatcher {
         request.addOption("--no-playlist")
         request.addOption("--no-part")
         request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
+        request.addOption("--retries", YTDLP_RETRIES)
         // Public reels are usually downloadable anonymously; private ones are not.
         request.addOption("--no-check-certificates")
         request.addOption("--user-agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
@@ -323,14 +360,23 @@ object ReelMatcher {
     return MatchResult.Matched(song, recognition, reelTitle)
   }
 
-  /** Searches YouTube Music's song filter and returns plain [SongItem]s. */
-  private suspend fun searchYouTubeMusic(query: String): List<SongItem> {
+  /**
+   * Searches YouTube Music's song filter.
+   *
+   * Returns `null` when the search could not be completed (timeout / network error) so
+   * callers can distinguish "no results" from "YouTube Music unreachable" — the latter
+   * must not be mistaken for proof that the song does not exist. Bounded by
+   * [SEARCH_TIMEOUT_SECONDS] so a stalled request can never hang the pipeline.
+   */
+  private suspend fun searchYouTubeMusic(query: String): List<SongItem>? {
     if (query.isBlank()) return emptyList()
-    return runCatching { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrThrow() }
-      .onFailure { reportException(it) }
-      .getOrNull()
-      ?.items
-      ?.filterIsInstance<SongItem>()
-      .orEmpty()
+    return withTimeoutOrNull(SEARCH_TIMEOUT_SECONDS.seconds) {
+      runCatching { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrThrow() }
+        .onFailure { reportException(it) }
+        .getOrNull()
+        ?.items
+        ?.filterIsInstance<SongItem>()
+        .orEmpty()
+    }
   }
 }

@@ -37,7 +37,6 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.R
-import echo.music.iad1tya.echomusic.updater.getUpdateAvailableState
 import echo.music.iad1tya.ui.component.IconButton
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
 import echo.music.iad1tya.ui.component.Material3SettingsItem
@@ -54,9 +53,6 @@ fun SettingsScreen(
   val uriHandler = LocalUriHandler.current
   val context = LocalContext.current
   val isAndroid12OrLater = Build.VERSION.SDK_INT >= Build.VERSION_CODES.S
-  val isUpdateAvailable =
-    getUpdateAvailableState(context) &&
-      echo.music.iad1tya.echomusic.updater.getAutoUpdateCheckSetting(context)
 
   var searchQuery by rememberSaveable { mutableStateOf("") }
   val searchLower = searchQuery.lowercase()
@@ -288,22 +284,9 @@ fun SettingsScreen(
         add(
           Material3SettingsItem(
             isHighlighted = (highlightKey == systemUpdateText),
-            icon =
-              painterResource(
-                if (isUpdateAvailable) R.drawable.ic_launcher_nobg else R.drawable.update
-              ),
+            icon = painterResource(R.drawable.update),
             title = { Text(systemUpdateText) },
-            description =
-              if (isUpdateAvailable) {
-                {
-                  Text(
-                    text = stringResource(R.string.update_available),
-                    color = MaterialTheme.colorScheme.error
-                  )
-                }
-              } else {
-                { Text(systemUpdateDesc) }
-              },
+            description = { Text(systemUpdateDesc) },
             onClick = { navController.navigate("settings/update") }
           )
         )

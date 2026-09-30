@@ -3,6 +3,9 @@
     "Reel Import — Share an Instagram Reel to Echo Music: it identifies the song and asks you to confirm the match, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap."
   ],
   "bug_fixes": [
+    "Reel Import no longer hangs on “Matching on YouTube Music”: every search is now time-boxed, so a slow or flaky connection can't stall the import for minutes before audio fingerprinting even starts.",
+    "Song-credit captions (Song Name / Movie / Singers / Composer blocks) are now read properly — the song title is searched without the credit labels, and the best hint is prefilled into manual search when automatic identification finds nothing.",
+    "If YouTube Music is unreachable, Reel Import skips the hopeless fingerprint attempt and offers manual search immediately instead of spinning.",
     "Reel Import now actually works end to end: the yt-dlp audio-extraction command was invalid (yt-dlp rejected it instantly), so fingerprinting never ran — fixed and verified against a real reel.",
     "The bundled yt-dlp binary is updated to the latest release on first launch, so Instagram's changing site layout no longer breaks metadata or audio extraction.",
     "Audio excerpts are delivered to the fingerprinter as clean 16-bit PCM (WAV container header stripped), preventing possible recognition failures."
