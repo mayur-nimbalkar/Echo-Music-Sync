@@ -39,7 +39,7 @@ object ReelMatcher {
   private const val MAX_EXCERPT_BYTES = 800_000
 
   /** Total audio kept for the two fingerprint windows (start + middle): ~50 s. */
-  private const val MAX_TOTAL_PCM_BYTES = 3_200_000
+  private const val MAX_TOTAL_PCM_BYTES = 3_200_000L
 
   /** Audio format the excerpt is converted into before fingerprinting. */
   private const val PCM_SAMPLE_RATE = 16_000
