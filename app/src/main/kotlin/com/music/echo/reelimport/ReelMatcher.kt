@@ -40,6 +40,9 @@ object ReelMatcher {
   private const val PCM_SAMPLE_RATE = 16_000
   private const val PCM_CHANNELS = 2
 
+  /** Standard RIFF/WAVE header size stripped before fingerprinting. */
+  private const val WAV_HEADER_BYTES = 44L
+
   /** yt-dlp network timeouts in seconds. */
   private const val SOCKET_TIMEOUT_SECONDS = 15
 
@@ -99,7 +102,12 @@ object ReelMatcher {
     try {
       YoutubeDL.init(context)
       FFmpeg.init(context)
-      Timber.i("ReelMatcher: yt-dlp initialized")
+      // The library ships a frozen yt-dlp from its release date; site extractors drift
+      // constantly, so bring the binary current before first use (done once per version,
+      // the updater no-ops when already current).
+      runCatching { YoutubeDL.updateYoutubeDL(context, YoutubeDL.UpdateChannel.STABLE) }
+        .onSuccess { status -> Timber.i("ReelMatcher: yt-dlp updated ($status)") }
+        .onFailure { Timber.e(it, "ReelMatcher: yt-dlp update failed — using bundled binary") }
     } catch (e: Exception) {
       Timber.e(e, "ReelMatcher: yt-dlp init failed")
     }
@@ -211,7 +219,9 @@ object ReelMatcher {
       }
 
     val signature = VibraSignature.fromI16(resampled.data)
-    val sampleDurationMs = (resampled.data.size / 2) * 1000L / VibraSignature.REQUIRED_SAMPLE_RATE
+    // 16-bit frames: bytes ÷ 2 per sample, ÷ channel count; ms = frames × 1000 ÷ rate.
+    val sampleDurationMs =
+      (resampled.data.size.toLong() / 2 / PCM_CHANNELS) * 1000L / VibraSignature.REQUIRED_SAMPLE_RATE
 
     return com.music.shazamkit.Shazam.recognize(signature, sampleDurationMs).getOrNull()
   }
@@ -225,13 +235,17 @@ object ReelMatcher {
       ReelImportState.report(ReelImportStage.EXTRACTING)
       var outFile: File? = null
       try {
-        outFile = File.createTempFile("reel_excerpt_", ".pcm", context.cacheDir)
+        outFile = File.createTempFile("reel_excerpt_", ".wav", context.cacheDir)
         val request = YoutubeDLRequest(url)
         request.addOption("-x")
-        request.addOption("--audio-format", "s16le")
-        request.addOption("--audio-channels", PCM_CHANNELS)
-        request.addOption("--audio-samplerate", PCM_SAMPLE_RATE)
-        request.addOption("-o", outFile.absolutePath.substringBeforeLast(".pcm") + ".%(ext)s")
+        // `s16le` is not a valid --audio-format; WAV decodes to PCM 16-bit little-endian.
+        request.addOption("--audio-format", "wav")
+        // Channel/rate conversion is not an yt-dlp flag — pass it to the bundled ffmpeg.
+        request.addOption(
+          "--postprocessor-args",
+          "ffmpeg:-ar $PCM_SAMPLE_RATE -ac $PCM_CHANNELS",
+        )
+        request.addOption("-o", outFile.absolutePath.substringBeforeLast(".wav") + ".%(ext)s")
         request.addOption("--no-playlist")
         request.addOption("--no-part")
         request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
@@ -242,14 +256,32 @@ object ReelMatcher {
         // The library injects --ffmpeg-location automatically for every execution.
         YoutubeDL.getInstance().execute(request)
 
-        if (!outFile.exists() || outFile.length() == 0L) {
+        // yt-dlp names the output after the container (`.wav`), not our suffix.
+        val wavFile =
+          if (outFile.exists() && outFile.length() > 0L) {
+            outFile
+          } else {
+            File(outFile.absolutePath.substringBeforeLast(".wav") + ".wav")
+          }
+        if (!wavFile.exists() || wavFile.length() == 0L) {
           Timber.tag("ReelMatcher").w("PCM excerpt was not produced")
           return@withContext null
         }
+        outFile = wavFile
+        Timber.tag("ReelMatcher").i("PCM excerpt ready: %d bytes", wavFile.length())
 
-        val excerptSize = minOf(MAX_EXCERPT_BYTES.toLong(), outFile.length()).toInt()
+        val excerptSize =
+          minOf(MAX_EXCERPT_BYTES.toLong() + WAV_HEADER_BYTES, outFile.length()).toInt()
         val buffer = ByteBuffer.allocate(excerptSize)
         outFile.inputStream().use { input ->
+          // Discard the WAV container header — only raw PCM goes to the fingerprinter.
+          val header = ByteArray(WAV_HEADER_BYTES.toInt())
+          var headerRead = 0
+          while (headerRead < header.size) {
+            val r = input.read(header, headerRead, header.size - headerRead)
+            if (r <= 0) break
+            headerRead += r
+          }
           val bytes = ByteArray(16 * 1024)
           while (buffer.hasRemaining()) {
             val read = input.read(bytes, 0, minOf(bytes.size, buffer.remaining()))
