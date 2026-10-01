@@ -1,5 +1,11 @@
 package echo.music.iad1tya.ui.screens.reelimport
 
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +20,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +32,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -40,6 +48,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.res.painterResource
@@ -116,7 +125,18 @@ fun ReelImportScreen(
     },
   ) { paddingValues ->
     Box(
-      modifier = Modifier.fillMaxSize().padding(paddingValues).padding(16.dp),
+      modifier =
+        Modifier.fillMaxSize()
+          .background(
+            Brush.verticalGradient(
+              listOf(
+                MaterialTheme.colorScheme.surfaceContainer,
+                MaterialTheme.colorScheme.surface,
+              )
+            )
+          )
+          .padding(paddingValues)
+          .padding(16.dp),
       contentAlignment = Alignment.Center,
     ) {
       when (val state = uiState) {
@@ -124,7 +144,7 @@ fun ReelImportScreen(
 
         is ReelImportUiState.Working -> WorkingContent(state.stage, state.searchQuery)
 
-        is ReelImportUiState.Searching -> SearchingContent(state.query)
+        is ReelImportUiState.Searching -> WorkingContent(ReelImportStage.MATCHING, state.query)
 
         is ReelImportUiState.AwaitingConfirmation ->
           ConfirmationContent(
@@ -243,22 +263,72 @@ fun ReelImportScreen(
 private fun IdleContent() {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(12.dp),
+    verticalArrangement = Arrangement.spacedBy(20.dp),
+    modifier = Modifier.fillMaxWidth(),
   ) {
-    Icon(
-      painter = painterResource(R.drawable.graphic_eq),
-      contentDescription = null,
-      modifier = Modifier.size(64.dp),
-      tint = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
+    Box(
+      modifier =
+        Modifier.size(120.dp)
+          .clip(RoundedCornerShape(32.dp))
+          .background(
+            Brush.linearGradient(
+              listOf(
+                MaterialTheme.colorScheme.primaryContainer,
+                MaterialTheme.colorScheme.secondaryContainer,
+              )
+            )
+          ),
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.graphic_eq),
+        contentDescription = null,
+        modifier = Modifier.size(56.dp),
+        tint = MaterialTheme.colorScheme.onPrimaryContainer,
+      )
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+      Text(
+        text = stringResource(R.string.reel_import),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+      )
+      Text(
+        text = stringResource(R.string.reel_import_share_hint),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+      )
+    }
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(24.dp),
+      verticalAlignment = Alignment.CenterVertically,
+      modifier = Modifier.padding(top = 8.dp),
+    ) {
+      IdleStep(icon = R.drawable.share, label = stringResource(R.string.reel_import_step_share))
+      IdleStep(icon = R.drawable.graphic_eq, label = stringResource(R.string.reel_import_step_identify))
+      IdleStep(icon = R.drawable.playlist_add, label = stringResource(R.string.reel_import_step_save))
+    }
+  }
+}
+
+@Composable
+private fun IdleStep(icon: Int, label: String) {
+  Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
+    Box(
+      modifier = Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh),
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(
+        painter = painterResource(icon),
+        contentDescription = null,
+        modifier = Modifier.size(22.dp),
+        tint = MaterialTheme.colorScheme.primary,
+      )
+    }
     Text(
-      text = stringResource(R.string.reel_import),
-      style = MaterialTheme.typography.titleLarge,
-      color = MaterialTheme.colorScheme.onSurface,
-    )
-    Text(
-      text = stringResource(R.string.reel_import_share_hint),
-      style = MaterialTheme.typography.bodyMedium,
+      text = label,
+      style = MaterialTheme.typography.labelMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,
     )
@@ -267,32 +337,146 @@ private fun IdleContent() {
 
 @Composable
 private fun WorkingContent(stage: ReelImportStage, searchQuery: String? = null) {
+  val stepIndex =
+    when (stage) {
+      ReelImportStage.EXTRACTING -> 1
+      ReelImportStage.LISTENING -> 2
+      ReelImportStage.MATCHING -> 3
+      else -> 0
+    }
+
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(24.dp),
+    verticalArrangement = Arrangement.spacedBy(28.dp),
+    modifier = Modifier.fillMaxWidth(),
   ) {
-    CircularProgressIndicator(
-      modifier = Modifier.size(96.dp),
-      strokeWidth = 6.dp,
-      color = MaterialTheme.colorScheme.onSurface,
+    EqualizerBadge()
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
+      WorkingStep(
+        label = stringResource(R.string.reel_import_step_reel),
+        state = if (stepIndex > 0) StepState.Done else StepState.Current,
+      )
+      WorkingStep(
+        label = stringResource(R.string.reel_import_step_audio),
+        state =
+          when {
+            stepIndex > 1 -> StepState.Done
+            stepIndex == 1 -> StepState.Current
+            else -> StepState.Pending
+          },
+      )
+      WorkingStep(
+        label = stringResource(R.string.reel_import_step_listen),
+        state =
+          when {
+            stepIndex > 2 -> StepState.Done
+            stepIndex == 2 -> StepState.Current
+            else -> StepState.Pending
+          },
+      )
+      WorkingStep(
+        label =
+          if (stepIndex == 3 && !searchQuery.isNullOrBlank()) {
+            // Show the live query so a slow stage is never a blind spinner.
+            stringResource(R.string.reel_import_searching, searchQuery)
+          } else {
+            stringResource(R.string.reel_import_step_match)
+          },
+        state = if (stepIndex == 3) StepState.Current else StepState.Pending,
+      )
+    }
+  }
+}
+
+private enum class StepState { Current, Done, Pending }
+
+@Composable
+private fun EqualizerBadge() {
+  val transition = rememberInfiniteTransition(label = "equalizer")
+  val bar1 by
+    transition.animateFloat(
+      initialValue = 0.35f,
+      targetValue = 1f,
+      animationSpec = infiniteRepeatable(tween(500, easing = LinearEasing), RepeatMode.Reverse),
+      label = "bar1",
     )
+  val bar2 by
+    transition.animateFloat(
+      initialValue = 0.9f,
+      targetValue = 0.3f,
+      animationSpec = infiniteRepeatable(tween(640, easing = LinearEasing), RepeatMode.Reverse),
+      label = "bar2",
+    )
+  val bar3 by
+    transition.animateFloat(
+      initialValue = 0.55f,
+      targetValue = 1f,
+      animationSpec = infiniteRepeatable(tween(420, easing = LinearEasing), RepeatMode.Reverse),
+      label = "bar3",
+    )
+  val bars = listOf(bar1, bar2, bar3)
+
+  Box(
+    modifier =
+      Modifier.size(112.dp)
+        .clip(CircleShape)
+        .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.14f)),
+    contentAlignment = Alignment.Center,
+  ) {
+    Row(
+      horizontalArrangement = Arrangement.spacedBy(6.dp),
+      verticalAlignment = Alignment.CenterVertically,
+    ) {
+      bars.forEach { fraction ->
+        Box(
+          modifier =
+            Modifier.width(7.dp)
+              .height(48.dp * fraction)
+              .clip(RoundedCornerShape(4.dp))
+              .background(MaterialTheme.colorScheme.primary),
+        )
+      }
+    }
+  }
+}
+
+@Composable
+private fun WorkingStep(label: String, state: StepState) {
+  Row(
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(12.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+  ) {
+    when (state) {
+      StepState.Done ->
+        Icon(
+          painter = painterResource(R.drawable.check),
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.primary,
+          modifier = Modifier.size(20.dp),
+        )
+      StepState.Current ->
+        CircularProgressIndicator(
+          modifier = Modifier.size(18.dp),
+          strokeWidth = 2.5.dp,
+          color = MaterialTheme.colorScheme.primary,
+        )
+      StepState.Pending ->
+        Box(
+          modifier = Modifier.size(10.dp).padding(1.dp).clip(CircleShape).background(MaterialTheme.colorScheme.outlineVariant),
+        )
+    }
     Text(
-      text =
-        if (stage == ReelImportStage.MATCHING && !searchQuery.isNullOrBlank()) {
-          // Show what is being searched so a slow stage is never a blind spinner.
-          stringResource(R.string.reel_import_searching, searchQuery)
-        } else {
-          when (stage) {
-            ReelImportStage.EXTRACTING -> stringResource(R.string.reel_import_extracting_audio)
-            ReelImportStage.LISTENING -> stringResource(R.string.reel_import_listening)
-            ReelImportStage.MATCHING -> stringResource(R.string.reel_import_matching)
-            ReelImportStage.ADDING -> stringResource(R.string.reel_import_add_to_playlist)
-            else -> stringResource(R.string.reel_import_fetching_metadata)
-          }
+      text = label,
+      style = MaterialTheme.typography.bodyLarge,
+      color =
+        when (state) {
+          StepState.Done -> MaterialTheme.colorScheme.onSurfaceVariant
+          StepState.Current -> MaterialTheme.colorScheme.onSurface
+          StepState.Pending -> MaterialTheme.colorScheme.outline
         },
-      style = MaterialTheme.typography.titleLarge,
-      color = MaterialTheme.colorScheme.onSurface,
-      textAlign = TextAlign.Center,
+      maxLines = 1,
+      overflow = TextOverflow.Ellipsis,
     )
   }
 }
@@ -386,26 +570,6 @@ private fun ConfirmationContent(
 }
 
 @Composable
-private fun SearchingContent(query: String) {
-  Column(
-    horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(24.dp),
-  ) {
-    CircularProgressIndicator(
-      modifier = Modifier.size(96.dp),
-      strokeWidth = 6.dp,
-      color = MaterialTheme.colorScheme.onSurface,
-    )
-    Text(
-      text = stringResource(R.string.reel_import_searching, query),
-      style = MaterialTheme.typography.titleLarge,
-      color = MaterialTheme.colorScheme.onSurface,
-      textAlign = TextAlign.Center,
-    )
-  }
-}
-
-@Composable
 private fun CandidatePickerContent(
   candidates: List<SongItem>,
   reelTitle: String,
@@ -418,9 +582,8 @@ private fun CandidatePickerContent(
   var searchText by remember(candidates, reelTitle) { mutableStateOf("") }
   var prefilled by remember(candidates, reelTitle) { mutableStateOf(false) }
 
-  // Nothing found automatically: start the manual search from the best song hint
-  // mined from the caption, so the user corrects it in one tap instead of typing
-  // from scratch.
+  // Nothing found automatically: start the manual search from the official
+  // attribution/hint so the user corrects it in one tap instead of typing from scratch.
   LaunchedEffect(candidates, reelTitle) {
     if (!prefilled && candidates.isEmpty() && searchText.isBlank() && reelTitle.isNotBlank()) {
       searchText = reelTitle
@@ -428,29 +591,33 @@ private fun CandidatePickerContent(
     }
   }
 
+  val visibleCandidates = candidates.take(MAX_VISIBLE_CANDIDATES)
+
   Column(
     modifier = Modifier.fillMaxWidth(),
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(12.dp),
+    verticalArrangement = Arrangement.spacedBy(14.dp),
   ) {
-    Text(
-      text = stringResource(R.string.reel_import_confirm_prompt),
-      style = MaterialTheme.typography.titleLarge,
-      color = MaterialTheme.colorScheme.onSurface,
-      textAlign = TextAlign.Center,
-    )
-    if (candidates.isEmpty()) {
+    Column(
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.spacedBy(4.dp),
+    ) {
       Text(
-        text = stringResource(R.string.reel_import_search_manually_hint),
+        text = stringResource(R.string.reel_import_pick_title),
+        style = MaterialTheme.typography.headlineSmall,
+        color = MaterialTheme.colorScheme.onSurface,
+        textAlign = TextAlign.Center,
+      )
+      Text(
+        text =
+          if (candidates.isEmpty()) {
+            stringResource(R.string.reel_import_search_manually_hint)
+          } else {
+            stringResource(R.string.reel_import_original_audio)
+          },
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
-      )
-    } else {
-      Text(
-        text = stringResource(R.string.reel_import_original_audio),
-        style = MaterialTheme.typography.bodyMedium,
-        color = MaterialTheme.colorScheme.onSurfaceVariant,
       )
     }
     Row(
@@ -475,31 +642,78 @@ private fun CandidatePickerContent(
         Text(stringResource(R.string.reel_import_search_action))
       }
     }
-    if (candidates.isNotEmpty()) {
-      LazyColumn(
-        modifier = Modifier.fillMaxWidth().height(340.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp),
+    if (visibleCandidates.isNotEmpty()) {
+      Surface(
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth(),
       ) {
-        itemsIndexed(candidates) { index, song ->
-          ListItem(
-            title = song.title,
-            subtitle = { Text(song.artists.joinToString { it.name }) },
-            thumbnailContent = {
-              AsyncImage(
-                model = song.thumbnail,
-                contentDescription = null,
-                contentScale = ContentScale.Crop,
-                modifier = Modifier.size(ListThumbnailSize).clip(RoundedCornerShape(8.dp)),
-              )
-            },
-            shape = listItemShape(index = index, count = candidates.size),
-            modifier = Modifier.clickable { onPick(song) },
-            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-          )
+        LazyColumn(
+          modifier =
+            Modifier.fillMaxWidth()
+              .height(if (candidates.size <= 4) 240.dp else 420.dp)
+              .padding(vertical = 6.dp),
+          verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+          items(visibleCandidates, key = { it.id }) { song ->
+            SongCandidateRow(song = song, onPick = { onPick(song) })
+          }
         }
       }
+      if (candidates.size > MAX_VISIBLE_CANDIDATES) {
+        Text(
+          text = stringResource(R.string.reel_import_more_results, candidates.size - MAX_VISIBLE_CANDIDATES),
+          style = MaterialTheme.typography.labelMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+      }
     }
-    TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+    TextButton(onClick = onDismiss) { Text(stringResource(R.string.reel_import_close)) }
+  }
+}
+
+/** Max songs shown in the picker before a "N more" hint appears. */
+private const val MAX_VISIBLE_CANDIDATES = 10
+
+/** One tappable song candidate with artwork, title and artist. */
+@Composable
+private fun SongCandidateRow(song: SongItem, onPick: () -> Unit) {
+  Row(
+    verticalAlignment = Alignment.CenterVertically,
+    horizontalArrangement = Arrangement.spacedBy(12.dp),
+    modifier =
+      Modifier.fillMaxWidth()
+        .clickable(onClick = onPick)
+        .padding(horizontal = 12.dp, vertical = 8.dp),
+  ) {
+    AsyncImage(
+      model = song.thumbnail,
+      contentDescription = null,
+      contentScale = ContentScale.Crop,
+      modifier = Modifier.size(44.dp).clip(RoundedCornerShape(10.dp)),
+    )
+    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(1.dp)) {
+      Text(
+        text = song.title,
+        style = MaterialTheme.typography.bodyLarge,
+        color = MaterialTheme.colorScheme.onSurface,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+      Text(
+        text = song.artists.joinToString { it.name },
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        maxLines = 1,
+        overflow = TextOverflow.Ellipsis,
+      )
+    }
+    Icon(
+      painter = painterResource(R.drawable.playlist_add),
+      contentDescription = null,
+      tint = MaterialTheme.colorScheme.primary,
+      modifier = Modifier.size(20.dp),
+    )
   }
 }
 

@@ -128,6 +128,13 @@ object ReelTitleParser {
   }
 
   /**
+   * Canonical reel URL: strips tracking query parameters (e.g. Instagram's `?stkn=…`)
+   * and fragments. Share tokens make requests look different per share and break
+   * extraction/attribution fetches; the bare reel URL is always enough.
+   */
+  fun canonicalReelUrl(url: String): String = url.substringBefore('?').substringBefore('#')
+
+  /**
    * Turns a raw Instagram reel title (as produced by yt-dlp) into a search-friendly song query:
    * strips the `on Instagram:` wrapper, hashtags/mentions and repeated whitespace.
    */

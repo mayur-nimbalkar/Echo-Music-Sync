@@ -4,6 +4,9 @@
     "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap."
   ],
   "bug_fixes": [
+    "Reel Import now cleans share links before reading them: tracking parameters like the “?stkn=…” share token are stripped, so metadata and audio-attribution lookups always use the plain reel URL instead of getting JSON error pages.",
+    "Importing another reel while the import screen is already open now starts the new search immediately — it no longer reuses the previous reel's search queries.",
+    "Reel Import got a visual refresh to match the app theme: a themed gradient background, an animated step-by-step progress view (reel → audio → identify → match), and a song picker that shows up to ten candidates in a themed card with a “N more” hint.",
     "Reel Import no longer guesses the song from creator captions: it uses Instagram's official audio metadata (track/artist, fetched from the reel page when needed) first, then fingerprints the actual audio — captions routinely misname or omit the song.",
     "Fixed a crash when adding a reel's song to a playlist that no longer exists (e.g. a stale default playlist was deleted) — it now falls back to the playlist picker instead of crashing.",
     "Creating a playlist from the reel import flow now reliably adds the song to it — previously the playlist creation could be cancelled before it was saved, leaving the song stranded with a “Couldn't find that song.” error.",

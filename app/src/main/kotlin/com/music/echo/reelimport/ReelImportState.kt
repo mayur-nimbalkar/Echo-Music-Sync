@@ -53,8 +53,14 @@ object ReelImportState {
       )
   }
 
-  fun update(transform: (PendingImport) -> PendingImport) {
-    _current.value = _current.value?.let(transform)
+  /**
+   * Applies [transform] only when the current pending import belongs to [url].
+   * A cancelled previous run can still fire one last update; without the URL guard
+   * it would pollute the new run's state (e.g. stale search queries on screen).
+   */
+  fun update(url: String, transform: (PendingImport) -> PendingImport) {
+    val current = _current.value ?: return
+    if (current.reelUrl == url) _current.value = transform(current)
   }
 
   fun clear() {
