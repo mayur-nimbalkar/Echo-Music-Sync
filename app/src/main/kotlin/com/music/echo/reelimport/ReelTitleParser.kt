@@ -80,7 +80,7 @@ object ReelTitleParser {
         .find(html)?.groupValues?.get(1)
     if (!attributed.isNullOrBlank()) {
       val stripped = sanitizeQuery(attributed)
-      if (stripped.isNotBlank()) return stripped
+      if (stripped.isNotBlank() && isPlausibleTrackTitle(stripped)) return stripped
     }
     // Fall back to the longest short text line of the embed body — the attribution line
     // sits alone on its own line in the embed markup.
@@ -98,9 +98,37 @@ object ReelTitleParser {
     }
     bestLine?.let { line ->
       val stripped = sanitizeQuery(line)
-      if (stripped.isNotBlank()) return stripped
+      if (stripped.isNotBlank() && isPlausibleTrackTitle(stripped)) return stripped
     }
     return null
+  }
+
+  /** Id-like tokens: 10+ mixed letters/digits (hashes, base64, media ids, share tokens). */
+  private val ID_LIKE_TOKEN = Regex("(?=.*[A-Za-z])(?=.*[0-9])[A-Za-z0-9_-]{10,}")
+
+  /** Mime-type-looking strings ("application/json") — extractor content types, not songs. */
+  private val MIME_LIKE = Regex("^[a-z]+/[a-z0-9+.-]+$")
+
+  /**
+   * Plausibility check for a track/recognition name: rejects extractor garbage —
+   * JSON blobs, hashes, share tokens, ids — before it can surface as a "match".
+   * Official metadata and fingerprint results must both pass this.
+   */
+  fun isPlausibleTrackTitle(title: String?): Boolean {
+    if (title.isNullOrBlank()) return false
+    val value = title.trim()
+    if (value.length !in 2..120) return false
+    // JSON blobs (response payloads that leaked through as "titles").
+    if (value.startsWith("{") || value.startsWith("[")) return false
+    // Content-type strings like "application/json" (fully lowercase word/word).
+    if (MIME_LIKE.matches(value)) return false
+    val letters = value.count { it.isLetter() }
+    if (letters == 0) return false
+    // Under 40% letters means symbol/base64 soup, not a song name.
+    if (letters * 100 < value.length * 40) return false
+    // Mixed letter+digit runs of 10+ chars are machine identifiers, never titles.
+    if (ID_LIKE_TOKEN.containsMatchIn(value)) return false
+    return true
   }
 
   /**
