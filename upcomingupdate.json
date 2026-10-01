@@ -15,7 +15,7 @@
     "The playlist picker in Reel Import now offers “Create playlist”, so a fresh install can add the first song without leaving the flow.",
     "Reel Import now listens to the reel's actual audio before trusting the caption: reels whose caption doesn't clearly name a song (hashtags, jokes, foreign text) are fingerprinted instead of being matched against caption guesses, which previously produced wrong or missing results.",
     "Audio fingerprinting now checks two positions in the reel (start and middle) — many reels only play the song after an intro, which the single first-second window missed.",
-    "Generic captions like “Breathless song”, “Video by …” and credit/disclaimer lines no longer produce false matches.",
+    "Generic captions like one-word placeholder captions, “Video by …” and credit/disclaimer lines no longer produce false matches.",
     "Reel Import no longer hangs on “Matching on YouTube Music”: every search is now time-boxed, so a slow or flaky connection can't stall the import for minutes before audio fingerprinting even starts.",
     "Song-credit captions (Song Name / Movie / Singers / Composer blocks) are now read properly — the song title is searched without the credit labels, and the best hint is prefilled into manual search when automatic identification finds nothing.",
     "If YouTube Music is unreachable, Reel Import skips the hopeless fingerprint attempt and offers manual search immediately instead of spinning.",
