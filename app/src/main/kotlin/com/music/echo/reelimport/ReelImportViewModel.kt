@@ -4,7 +4,9 @@ import android.content.Context
 import androidx.datastore.preferences.core.edit
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.music.innertube.YouTube
 import com.music.innertube.models.SongItem
+import com.music.innertube.models.WatchEndpoint
 import com.music.shazamkit.models.RecognitionResult
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -71,6 +73,17 @@ constructor(
 
   /** Kept from the confirmation step so history can be saved after state transitions. */
   private var pendingRecognition: RecognitionResult? = null
+
+  /** Related songs shown on the Finished screen after a successful import. */
+  private val _relatedSongs = MutableStateFlow<List<SongItem>>(emptyList())
+  val relatedSongs: StateFlow<List<SongItem>> = _relatedSongs.asStateFlow()
+
+  /** Related songs the user already added from the Finished screen. */
+  private val _addedRelatedIds = MutableStateFlow<Set<String>>(emptySet())
+  val addedRelatedIds: StateFlow<Set<String>> = _addedRelatedIds.asStateFlow()
+
+  private var lastAddedPlaylistId: String? = null
+  private var lastAddedPlaylistName: String? = null
 
   init {
     viewModelScope.launch {
@@ -158,6 +171,68 @@ constructor(
   fun pickCandidate(song: SongItem, playlistId: String?) = confirm(song, playlistId)
 
   /**
+   * Completes the import once the song is in a playlist: switches to the Finished
+   * state and loads related songs (same album/movie/artist mood).
+   */
+  fun onImportAdded(song: SongItem, playlistId: String, playlistName: String) {
+    lastAddedPlaylistId = playlistId
+    lastAddedPlaylistName = playlistName
+    ReelImportState.report(ReelImportStage.DONE)
+    _uiState.value = ReelImportUiState.Finished(playlistName)
+    loadRelatedSongs(song)
+  }
+
+  /**
+   * Songs related to the imported track (same album/movie/artist mood), fetched from
+   * YouTube Music's related endpoint; falls back to an artist search.
+   */
+  fun loadRelatedSongs(song: SongItem) {
+    _relatedSongs.value = emptyList()
+    _addedRelatedIds.value = emptySet()
+    viewModelScope.launch(Dispatchers.IO) {
+      val related =
+        runCatching {
+            val endpoint =
+              YouTube.next(WatchEndpoint(videoId = song.id)).getOrNull()?.relatedEndpoint
+            endpoint?.let { YouTube.related(it).getOrNull() }?.songs.orEmpty()
+          }
+          .getOrNull()
+          .orEmpty()
+          .filter { it.id != song.id }
+          .distinctBy { it.id }
+      _relatedSongs.value =
+        if (related.isNotEmpty()) related.take(12) else relatedViaArtist(song)
+    }
+  }
+
+  /** Fallback: songs by the same primary artist. */
+  private suspend fun relatedViaArtist(song: SongItem): List<SongItem> {
+    val artist = song.artists.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: return emptyList()
+    return ReelMatcher.search(artist)
+      .filter { it.id != song.id }
+      .distinctBy { it.id }
+      .take(12)
+  }
+
+  /** Adds a related song to the playlist the imported song went into. */
+  fun addRelatedToPlaylist(song: SongItem) {
+    val playlistId = lastAddedPlaylistId ?: return
+    viewModelScope.launch(Dispatchers.IO) {
+      val playlist = database.getPlaylistById(playlistId) ?: return@launch
+      runCatching {
+        database.withTransaction {
+          insert(song.toMediaMetadata())
+          addSongToPlaylist(playlist, listOf(song.id))
+        }
+        playlist.playlist.browseId?.let { browseId ->
+          runCatching { com.music.innertube.YouTube.addToPlaylist(browseId, song.id) }
+        }
+        _addedRelatedIds.value = _addedRelatedIds.value + song.id
+      }
+    }
+  }
+
+  /**
    * Manual search from the candidate picker. Replaces the candidate list so the user
    * can refine repeatedly without leaving the flow. Also lets the user search when
    * automatic identification found nothing.
@@ -209,45 +284,53 @@ constructor(
         playlist.playlist.browseId?.let { browseId ->
           runCatching { com.music.innertube.YouTube.addToPlaylist(browseId, song.id) }
         }
-        saveRecognitionHistory(song)
-        ReelImportState.report(ReelImportStage.DONE)
-        _uiState.value = ReelImportUiState.Finished(playlist.playlist.name)
+        saveImportedHistory(song)
+        onImportAdded(song, playlistId, playlist.playlist.name)
       } catch (e: Exception) {
         _uiState.value = ReelImportUiState.Failed(ReelImportStage.FAILED)
       }
     }
   }
 
-  /** Persist the fingerprint match in recognition history like Echo Find does. */
-  private suspend fun saveRecognitionHistory(song: SongItem) {
-    val recognition = pendingRecognition ?: return
+  /**
+   * Persists the import in the app's Recognised Songs history for EVERY reel import —
+   * with full fingerprint details when Shazam identified it, song metadata only when
+   * the match came from caption/track search.
+   */
+  private suspend fun saveImportedHistory(song: SongItem) {
+    val recognition = pendingRecognition
     runCatching {
       database.query {
         insert(
           RecognitionHistory(
-            trackId = recognition.trackId,
+            trackId = recognition?.trackId ?: song.id,
             title = song.title,
             artist = song.artists.joinToString { it.name },
-            album = recognition.album,
-            coverArtUrl = recognition.coverArtUrl,
-            coverArtHqUrl = recognition.coverArtHqUrl,
-            genre = recognition.genre,
-            releaseDate = recognition.releaseDate,
-            label = recognition.label,
-            shazamUrl = recognition.shazamUrl,
-            appleMusicUrl = recognition.appleMusicUrl,
-            spotifyUrl = recognition.spotifyUrl,
-            isrc = recognition.isrc,
+            album = recognition?.album,
+            coverArtUrl = recognition?.coverArtUrl ?: song.thumbnail,
+            coverArtHqUrl = recognition?.coverArtHqUrl ?: song.thumbnail,
+            genre = recognition?.genre,
+            releaseDate = recognition?.releaseDate,
+            label = recognition?.label,
+            shazamUrl = recognition?.shazamUrl,
+            appleMusicUrl = recognition?.appleMusicUrl,
+            spotifyUrl = recognition?.spotifyUrl,
+            isrc = recognition?.isrc,
             youtubeVideoId = song.id,
             recognizedAt = LocalDateTime.now(),
           )
         )
       }
     }
+    pendingRecognition = null
   }
 
   fun reset() {
     pendingRecognition = null
+    lastAddedPlaylistId = null
+    lastAddedPlaylistName = null
+    _relatedSongs.value = emptyList()
+    _addedRelatedIds.value = emptySet()
     ReelImportState.clear()
     _uiState.value = ReelImportUiState.Idle
   }

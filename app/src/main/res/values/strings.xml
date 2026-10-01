@@ -210,6 +210,7 @@
     <string name="reel_import_search_hint">Song title or artist</string>
     <string name="reel_import_search_action">Search</string>
     <string name="reel_import_search_manually_hint">Automatic identification found nothing — search for the song manually.</string>
+    <string name="reel_import_related_title">More like this</string>
     <string name="reel_import_error_ytdlp">Audio extraction failed. Try updating yt-dlp.</string>
     <string name="reel_import_not_reel">This link is not an Instagram Reel</string>
     <string name="reel_import_try_different_reel">Try a different reel</string>

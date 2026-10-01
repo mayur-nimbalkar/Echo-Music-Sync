@@ -1,8 +1,12 @@
 {
   "features": [
-    "Reel Import — Share an Instagram Reel to Echo Music: it identifies the song and asks you to confirm the match, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap."
+    "Reel Import — Share an Instagram Reel to Echo Music: it identifies the song and asks you to confirm the match, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap.",
+    "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap."
   ],
   "bug_fixes": [
+    "Reel Import now saves every imported song to Recognised Songs (Echo Find history), even when the match came from the caption rather than the fingerprint.",
+    "The manual-search box no longer keeps the previous reel's search text when you import another reel.",
+    "The playlist picker in Reel Import now offers “Create playlist”, so a fresh install can add the first song without leaving the flow.",
     "Reel Import now listens to the reel's actual audio before trusting the caption: reels whose caption doesn't clearly name a song (hashtags, jokes, foreign text) are fingerprinted instead of being matched against caption guesses, which previously produced wrong or missing results.",
     "Audio fingerprinting now checks two positions in the reel (start and middle) — many reels only play the song after an intro, which the single first-second window missed.",
     "Generic captions like “Breathless song”, “Video by …” and credit/disclaimer lines no longer produce false matches.",

@@ -59,6 +59,7 @@ import echo.music.iad1tya.db.entities.Playlist
 import echo.music.iad1tya.reelimport.ReelImportStage
 import echo.music.iad1tya.reelimport.ReelImportUiState
 import echo.music.iad1tya.reelimport.ReelImportViewModel
+import echo.music.iad1tya.ui.component.CreatePlaylistDialog
 import echo.music.iad1tya.ui.component.DefaultDialog
 import echo.music.iad1tya.ui.component.ListDialog
 import echo.music.iad1tya.ui.component.ListItem
@@ -79,15 +80,16 @@ fun ReelImportScreen(
   val uiState by viewModel.uiState.collectAsState()
   val playlists by viewModel.playlists.collectAsState()
   val defaultPlaylistId by viewModel.defaultPlaylistId.collectAsState()
-  var showPlaylistPicker by remember { mutableStateOf(false) }
+  val relatedSongs by viewModel.relatedSongs.collectAsState()
+  val addedRelatedIds by viewModel.addedRelatedIds.collectAsState()
   var showStopDefaultDialog by remember { mutableStateOf(false) }
+  var showCreatePlaylist by remember { mutableStateOf(false) }
 
   /** Song awaiting a playlist choice from the picker dialog. */
   var pendingSong by remember { mutableStateOf<SongItem?>(null) }
 
   fun openPlaylistPicker(song: SongItem) {
     pendingSong = song
-    showPlaylistPicker = true
   }
 
   // Auto-start when opened with a shared reel link.
@@ -151,6 +153,9 @@ fun ReelImportScreen(
             playlistName = state.playlistName,
             defaultPlaylistId = defaultPlaylistId,
             playlists = playlists,
+            relatedSongs = relatedSongs,
+            addedRelatedIds = addedRelatedIds,
+            onAddRelated = { viewModel.addRelatedToPlaylist(it) },
             onStopDefault = { showStopDefaultDialog = true },
             onDone = {
               viewModel.reset()
@@ -162,19 +167,29 @@ fun ReelImportScreen(
       }
     }
 
-    if (showPlaylistPicker) {
+    pendingSong?.let { song ->
       PlaylistPickerDialog(
         playlists = playlists,
         defaultPlaylistId = defaultPlaylistId,
-        onDismiss = {
-          showPlaylistPicker = false
-          pendingSong = null
-        },
+        onDismiss = { pendingSong = null },
         onPick = { playlistId, makeDefault ->
-          showPlaylistPicker = false
-          if (makeDefault) viewModel.setDefaultPlaylist(playlistId)
-          pendingSong?.let { viewModel.pickCandidate(it, playlistId) }
           pendingSong = null
+          if (makeDefault) viewModel.setDefaultPlaylist(playlistId)
+          viewModel.pickCandidate(song, playlistId)
+        },
+        onCreatePlaylist = { showCreatePlaylist = true },
+      )
+    }
+
+    if (showCreatePlaylist) {
+      CreatePlaylistDialog(
+        onDismiss = { showCreatePlaylist = false },
+        onPlaylistCreated = { playlistId ->
+          showCreatePlaylist = false
+          pendingSong?.let { song ->
+            pendingSong = null
+            viewModel.pickCandidate(song, playlistId)
+          }
         },
       )
     }
@@ -378,14 +393,18 @@ private fun CandidatePickerContent(
   onPick: (SongItem) -> Unit,
   onDismiss: () -> Unit,
 ) {
-  var searchText by remember { mutableStateOf("") }
+  // Reset per-import: keyed on candidates+reelTitle, so stale text from a previous
+  // reel never survives into the next search (remember{} alone survives recomposition).
+  var searchText by remember(candidates, reelTitle) { mutableStateOf("") }
+  var prefilled by remember(candidates, reelTitle) { mutableStateOf(false) }
 
   // Nothing found automatically: start the manual search from the best song hint
   // mined from the caption, so the user corrects it in one tap instead of typing
   // from scratch.
-  LaunchedEffect(candidates.isEmpty(), reelTitle) {
-    if (candidates.isEmpty() && searchText.isBlank() && reelTitle.isNotBlank()) {
+  LaunchedEffect(candidates, reelTitle) {
+    if (!prefilled && candidates.isEmpty() && searchText.isBlank() && reelTitle.isNotBlank()) {
       searchText = reelTitle
+      prefilled = true
     }
   }
 
@@ -474,10 +493,26 @@ private fun PlaylistPickerDialog(
   defaultPlaylistId: String,
   onDismiss: () -> Unit,
   onPick: (playlistId: String, makeDefault: Boolean) -> Unit,
+  onCreatePlaylist: () -> Unit,
 ) {
   var makeDefault by remember { mutableStateOf(false) }
 
   ListDialog(onDismiss = onDismiss) {
+    item {
+      ListItem(
+        title = stringResource(R.string.create_playlist),
+        thumbnailContent = {
+          Icon(
+            painter = painterResource(R.drawable.add),
+            contentDescription = null,
+            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.size(ListThumbnailSize),
+          )
+        },
+        modifier = Modifier.clickable(onClick = onCreatePlaylist),
+      )
+    }
+
     item {
       Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -537,6 +572,9 @@ private fun FinishedContent(
   playlistName: String?,
   defaultPlaylistId: String,
   playlists: List<Playlist>,
+  relatedSongs: List<SongItem>,
+  addedRelatedIds: Set<String>,
+  onAddRelated: (SongItem) -> Unit,
   onStopDefault: () -> Unit,
   onDone: () -> Unit,
 ) {
@@ -563,6 +601,49 @@ private fun FinishedContent(
       color = MaterialTheme.colorScheme.onSurface,
       textAlign = TextAlign.Center,
     )
+    if (relatedSongs.isNotEmpty()) {
+      Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+          text = stringResource(R.string.reel_import_related_title),
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.onSurface,
+          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+        )
+        LazyColumn(
+          modifier = Modifier.fillMaxWidth().height(280.dp),
+          verticalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+          itemsIndexed(relatedSongs) { index, song ->
+            val added = song.id in addedRelatedIds
+            ListItem(
+              title = song.title,
+              subtitle = { Text(song.artists.joinToString { it.name }) },
+              thumbnailContent = {
+                AsyncImage(
+                  model = song.thumbnail,
+                  contentDescription = null,
+                  contentScale = ContentScale.Crop,
+                  modifier = Modifier.size(ListThumbnailSize).clip(RoundedCornerShape(8.dp)),
+                )
+              },
+              shape = listItemShape(index = index, count = relatedSongs.size),
+              trailingContent = {
+                if (added) {
+                  Icon(
+                    painter = painterResource(R.drawable.check),
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary,
+                  )
+                }
+              },
+              color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
+              modifier =
+                Modifier.clickable(enabled = !added) { onAddRelated(song) },
+            )
+          }
+        }
+      }
+    }
     if (defaultName != null) {
       Column(
         modifier =
