@@ -230,4 +230,27 @@ class ReelTitleParserTest {
     assertNull(ReelTitleParser.extractOfficialAttribution(""))
     assertNull(ReelTitleParser.extractOfficialAttribution("<html>   \n  \n</html>"))
   }
+
+  @Test
+  fun `plausible titles are accepted`() {
+    assertTrue(ReelTitleParser.isPlausibleTrackTitle("Some Song Title"))
+    assertTrue(ReelTitleParser.isPlausibleTrackTitle("Summer Nights 2010 (Remastered)"))
+    assertTrue(ReelTitleParser.isPlausibleTrackTitle("AC/DC"))
+  }
+
+  @Test
+  fun `extractor garbage is rejected as a track title`() {
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle(null))
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle(""))
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle("   "))
+    // JSON blobs that leaked through as titles
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle("{\"responseContext\":{\"visitorData\":\"Cgs1LUpfOVY\"}}"))
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle("application/json"))
+    // Share tokens, hashes, machine ids
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle("Mmk1ZjVib3JjenV3"))
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle("a1b2c3d4e5f6g7h8"))
+    // Symbol soup / digits only
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle("///"))
+    assertTrue(!ReelTitleParser.isPlausibleTrackTitle("12345"))
+  }
 }

@@ -498,12 +498,39 @@ private fun ConfirmationContent(
     verticalArrangement = Arrangement.spacedBy(16.dp),
     modifier = Modifier.fillMaxWidth(),
   ) {
-    AsyncImage(
-      model = song.thumbnail,
-      contentDescription = null,
-      contentScale = ContentScale.Crop,
-      modifier = Modifier.size(180.dp).clip(RoundedCornerShape(24.dp)),
-    )
+    Box {
+      // Soft glow ring behind the artwork to lift it off the gradient background.
+      Box(
+        modifier =
+          Modifier.size(196.dp)
+            .clip(RoundedCornerShape(28.dp))
+            .background(MaterialTheme.colorScheme.primary.copy(alpha = 0.25f))
+            .align(Alignment.Center),
+      )
+      AsyncImage(
+        model = song.thumbnail,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.size(180.dp).clip(RoundedCornerShape(24.dp)).align(Alignment.Center),
+      )
+    }
+    // Where the match came from: the audio itself, or Instagram's official audio tag.
+    Surface(
+      color = MaterialTheme.colorScheme.secondaryContainer,
+      contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+      shape = RoundedCornerShape(50),
+    ) {
+      Text(
+        text =
+          if (recognition != null) {
+            stringResource(R.string.reel_import_source_fingerprint)
+          } else {
+            stringResource(R.string.reel_import_source_official)
+          },
+        style = MaterialTheme.typography.labelMedium,
+        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+      )
+    }
 
     Column(
       horizontalAlignment = Alignment.CenterHorizontally,

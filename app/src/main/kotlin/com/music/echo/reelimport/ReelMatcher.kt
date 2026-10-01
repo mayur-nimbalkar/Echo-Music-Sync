@@ -66,6 +66,17 @@ object ReelMatcher {
   /** Timeout for the Instagram embed-page attribution fetch (seconds). */
   private const val ATTRIBUTION_TIMEOUT_SECONDS = 8L
 
+  /** Instagram's public web app id — accepted by the mobile media-info endpoint. */
+  private const val IG_WEB_APP_ID = "936619743392459"
+
+  /**
+   * Instagram mobile app user agent for the media-info endpoint. The desktop web page
+   * is login-walled and exposes no audio metadata; the app endpoint returns the official
+   * `clips_metadata.music_info` block (song/artist/album) for public reels.
+   */
+  private const val IG_APP_USER_AGENT =
+    "Instagram 76.0.0.15.395 Android (29/10; 420dpi; 1080x2400; samsung; SM-A266B; a26x; exynos2100)"
+
   /** Reel URLs accepted by the importer. */
   private val REEL_URL_REGEX =
     Regex(
@@ -149,14 +160,20 @@ object ReelMatcher {
       val ytDlpOfficial = ReelTitleParser.officialQueryCandidates(info.track, info.artist, info.album)
       val officialQueries =
         ytDlpOfficial.ifEmpty {
-          // Attribution missing from yt-dlp JSON (common for most reels): try Instagram's
-          // own embed page, which carries the official audio-artist line.
-          val attribution =
-            run {
-              ReelImportState.report(ReelImportStage.FETCHING_METADATA)
-              fetchOfficialAttribution(reelUrl)
-            }
-          if (attribution != null) listOf(attribution) else emptyList()
+          // Attribution missing from yt-dlp JSON (common for most reels): ask Instagram's
+          // official media-info endpoint for the licensed-audio song/artist, then fall
+          // back to the embed page's attribution line.
+          ReelImportState.report(ReelImportStage.FETCHING_METADATA)
+          val apiTriple = fetchOfficialMetadataApi(reelUrl)
+          val apiQueries =
+            apiTriple?.let { (song, artist, album) ->
+              ReelTitleParser.officialQueryCandidates(song, artist, album)
+            }.orEmpty()
+          apiQueries.ifEmpty {
+            fetchOfficialAttribution(reelUrl)?.let { attribution ->
+              listOf(attribution, "$attribution artist").filter { it.isNotBlank() }
+            }.orEmpty()
+          }
         }
 
       // Stage 1 — search official audio metadata.
@@ -237,8 +254,8 @@ object ReelMatcher {
             durationSeconds = json.optInt("duration", 0),
             // Keep the full caption: song markers like `song:` often sit at the end.
             caption = json.optString("description").ifBlank { null },
-            track = json.optString("track").ifBlank { null },
-            artist = json.optString("artist").ifBlank { null },
+            track = json.optString("track").ifBlank { json.optString("igtv_track_name") }.ifBlank { null },
+            artist = json.optString("artist").ifBlank { json.optString("igtv_artist_name") }.ifBlank { null },
             album = json.optString("album").ifBlank { null },
           )
         }
@@ -293,7 +310,13 @@ object ReelMatcher {
     val sampleDurationMs =
       (resampled.data.size.toLong() / 2 / PCM_CHANNELS) * 1000L / VibraSignature.REQUIRED_SAMPLE_RATE
 
-    return com.music.shazamkit.Shazam.recognize(signature, sampleDurationMs).getOrNull()
+    val recognition = com.music.shazamkit.Shazam.recognize(signature, sampleDurationMs).getOrNull()
+    if (recognition == null) return null
+    if (!ReelTitleParser.isPlausibleTrackTitle(recognition.title)) {
+      Timber.tag("ReelMatcher").w("Discarding implausible fingerprint match: %s", recognition.title)
+      return null
+    }
+    return recognition
   }
 
   /**
@@ -418,6 +441,77 @@ object ReelMatcher {
         .onFailure { Timber.tag("ReelMatcher").d(it, "Attribution fetch failed for %s", reelUrl) }
         .getOrNull()
     }
+
+  /**
+   * Instagram's official audio metadata via the app's `media/info` endpoint.
+   *
+   * Returns the `(track, artist, album)` triple from `clips_metadata.music_info` when
+   * the reel uses licensed/library audio; null for original audio or when the endpoint
+   * is unavailable (401/403 from some IPs/networks) — callers then fall through to
+   * the next stage. This is the same data the Instagram app shows on the audio page.
+   */
+  private suspend fun fetchOfficialMetadataApi(reelUrl: String): Triple<String, String?, String?>? {
+    val shortcode =
+      Regex("(?:reel|reels|p)/([A-Za-z0-9_-]+)")
+        .find(reelUrl)
+        ?.groupValues
+        ?.get(1)
+        ?: return null
+    val mediaId = shortcodeToMediaId(shortcode) ?: return null
+    return runCatching {
+      withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
+        val request =
+          okhttp3.Request.Builder()
+            .url("https://i.instagram.com/api/v1/media/$mediaId/info/")
+            .header("User-Agent", IG_APP_USER_AGENT)
+            .header("x-ig-app-id", IG_WEB_APP_ID)
+            .build()
+        okhttp3.OkHttpClient.Builder()
+          .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+          .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+          .build()
+          .newCall(request)
+          .execute()
+          .use { response ->
+            if (!response.isSuccessful) return@withTimeoutOrNull null
+            val body = response.body?.string().orEmpty()
+            val json = org.json.JSONObject(body)
+            val item = json.optJSONArray("items")?.optJSONObject(0) ?: return@withTimeoutOrNull null
+            val clips = item.optJSONObject("clips_metadata")
+            val musicInfo = clips?.optJSONObject("music_info")?.optJSONObject("music_metadata")?.optJSONObject("music_info")
+            val song = musicInfo?.optString("song_name").orEmpty().ifBlank { null }
+            val artist = musicInfo?.optString("artist_name").orEmpty().ifBlank { null }
+            val album = musicInfo?.optString("album_name").orEmpty().ifBlank { null }
+            if (song.isNullOrBlank() && artist.isNullOrBlank()) {
+              // Original sound with no resolvable song: not usable as official metadata.
+              return@withTimeoutOrNull null
+            }
+            Triple(song ?: "", artist, album)
+          }
+      }
+    }
+      .onFailure { Timber.tag("ReelMatcher").d(it, "IG media/info fetch failed for %s", reelUrl) }
+      .getOrNull()
+  }
+
+  /** Instagram shortcode → numeric media id (base64url alphabet). */
+  private fun shortcodeToMediaId(shortcode: String): String? {
+    if (shortcode.isEmpty()) return null
+    var id = 0L
+    for (char in shortcode) {
+      val value =
+        when (char) {
+          in 'A'..'Z' -> char - 'A'
+          in 'a'..'z' -> char - 'a' + 26
+          in '0'..'9' -> char - '0' + 52
+          '-' -> 62
+          '_' -> 63
+          else -> return null
+        }
+      id = id * 64L + value
+    }
+    return id.toString()
+  }
 
   /** Maps a Shazam match to the same track on YouTube Music. */
   private suspend fun resolveOnYouTubeMusic(
