@@ -450,7 +450,7 @@ object ReelMatcher {
    * is unavailable (401/403 from some IPs/networks) — callers then fall through to
    * the next stage. This is the same data the Instagram app shows on the audio page.
    */
-  private fun fetchOfficialMetadataApi(reelUrl: String): Triple<String, String?, String?>? {
+  private suspend fun fetchOfficialMetadataApi(reelUrl: String): Triple<String, String?, String?>? {
     val shortcode =
       Regex("(?:reel|reels|p)/([A-Za-z0-9_-]+)")
         .find(reelUrl)
