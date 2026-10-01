@@ -20,8 +20,8 @@ object ReelTitleParser {
   private val TAGS_AND_MENTIONS = Regex("(?:^|\\s)[#@][\\p{L}\\p{N}_]+")
 
   /**
-   * Song-credit label prefixes found in caption credit blocks, e.g. `Song Name : Yeh Ishq Hai`
-   * or `Music / Composer : Pritam`. Only known label words are stripped, so genuine
+   * Song-credit label prefixes found in caption credit blocks, e.g. `Song Name : Some Song`
+   * or `Music / Composer : Some Artist`. Only known label words are stripped, so genuine
    * `Title: Artist` captions are left alone.
    */
   private val CREDIT_LABEL =
@@ -67,6 +67,57 @@ object ReelTitleParser {
     )
 
   private val TRIM_CHARS = "\"“”'‘’ \n\r\t♪♫🎵🎶"
+
+  /**
+   * Extracts the best official-attribution query from a reel's embed page text.
+   * Returns the artist-list line when one exists (official Instagram data), null otherwise.
+   */
+  fun extractOfficialAttribution(html: String): String? {
+    if (html.isBlank()) return null
+    // "Audio attributed to X, Y, Z" phrasing Instagram uses on the audio page/embed.
+    val attributed =
+      Regex("(?:attributed to|original audio(?: of)? by|audio by)\\s*[:\u2013\u2014-]?\\s*([A-Za-z\\p{L}][\\p{L}\\p{N}'’.,&\\- ]{2,80})", RegexOption.IGNORE_CASE)
+        .find(html)?.groupValues?.get(1)
+    if (!attributed.isNullOrBlank()) {
+      val stripped = sanitizeQuery(attributed)
+      if (stripped.isNotBlank()) return stripped
+    }
+    // Fall back to the longest short text line of the embed body — the attribution line
+    // sits alone on its own line in the embed markup.
+    var bestLine: String? = null
+    for (raw in html.lineSequence()) {
+      val line = raw.trim()
+      if (
+        line.length in 3..120 &&
+          !line.contains("http", ignoreCase = true) &&
+          !line.contains('<') &&
+          (bestLine == null || line.length > bestLine.length)
+      ) {
+        bestLine = line
+      }
+    }
+    bestLine?.let { line ->
+      val stripped = sanitizeQuery(line)
+      if (stripped.isNotBlank()) return stripped
+    }
+    return null
+  }
+
+  /**
+   * Builds official-metadata queries from yt-dlp's track/artist/album fields in priority
+   * order: "track artist", "track", "artist". Only OFFICIAL metadata — never captions.
+   */
+  fun officialQueryCandidates(track: String?, artist: String?, album: String?): List<String> {
+    val trackQ = track?.let { sanitizeQuery(it) }.orEmpty()
+    val artistQ = artist?.let { sanitizeQuery(it) }.orEmpty()
+    val albumQ = album?.let { sanitizeQuery(it) }.orEmpty()
+    val candidates = mutableListOf<String>()
+    if (trackQ.isNotBlank() && artistQ.isNotBlank()) candidates.add("$trackQ $artistQ")
+    if (trackQ.isNotBlank()) candidates.add(trackQ)
+    if (artistQ.isNotBlank()) candidates.add(artistQ)
+    if (albumQ.isNotBlank() && albumQ != trackQ) candidates.add(albumQ)
+    return candidates.distinct()
+  }
 
   /** Extracts the first URL from arbitrary share text, or null when none exists. */
   fun extractUrl(text: String?): String? {

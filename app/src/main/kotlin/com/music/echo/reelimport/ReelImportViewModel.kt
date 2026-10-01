@@ -237,7 +237,9 @@ constructor(
   fun addRelatedToPlaylist(song: SongItem) {
     val playlistId = lastAddedPlaylistId ?: return
     viewModelScope.launch(Dispatchers.IO) {
-      val playlist = database.getPlaylistById(playlistId) ?: return@launch
+      // getPlaylistById can throw NoSuchElementException (Room map lookup) when the
+      // playlist vanished — never crash the import flow over it.
+      val playlist = runCatching { database.getPlaylistById(playlistId) }.getOrNull() ?: return@launch
       runCatching {
         database.withTransaction {
           insert(song.toMediaMetadata())
@@ -300,7 +302,10 @@ constructor(
   private fun addToPlaylist(song: SongItem, playlistId: String) {
     viewModelScope.launch(Dispatchers.IO) {
       ReelImportState.report(ReelImportStage.ADDING)
-      val playlist = database.getPlaylistById(playlistId)
+      // getPlaylistById can throw NoSuchElementException (Room map lookup) when the
+      // playlist row is missing — e.g. a stale default-playlist preference after the
+      // playlist was deleted. Treat it as "not found" instead of crashing.
+      val playlist = runCatching { database.getPlaylistById(playlistId) }.getOrNull()
       if (playlist == null) {
         _uiState.value = ReelImportUiState.Failed(ReelImportStage.FAILED)
         return@launch

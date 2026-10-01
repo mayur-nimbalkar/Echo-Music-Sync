@@ -24,12 +24,15 @@ import timber.log.Timber
 /**
  * Identifies the background music of an Instagram Reel and resolves it to YouTube Music tracks.
  *
- * Pipeline (metadata-first, fast by default):
- * 1. yt-dlp fetches reel metadata (`--dump-json`) — caption/title, track/artist fields, thumbnail.
- * 2. Song hints are mined from the caption (`song:` markers, ♪ fragments, quoted lyrics, track
- *    fields) and searched on YouTube Music. This usually completes in seconds with no download.
- * 3. Only when the caption yields nothing does it fall back to extracting a short audio excerpt
- *    and fingerprinting it with the same [VibraSignature] used by Echo Find.
+ * Pipeline (official metadata first, audio second — captions are never used):
+ * 1. yt-dlp fetches reel metadata (`--dump-json`); if the official audio attribution is missing
+ *    there, Instagram's web app embed page is fetched for it ("audio attributed to …").
+ * 2. Official track/artist/album metadata is searched on YouTube Music. Fast, and authoritative
+ *    when present — Instagram knows exactly which audio the reel uses.
+ * 3. When no official metadata exists (original audio), a short excerpt is fingerprinted with
+ *    the same [VibraSignature] used by Echo Find.
+ * 4. Anything else lands in the manual-search picker — creator captions are deliberately
+ *    ignored because they routinely misname or omit the song.
  *
  * A public [search] is exposed so the UI always offers a manual escape hatch.
  */
@@ -57,11 +60,11 @@ object ReelMatcher {
   /** Hard wall-clock budget for one YouTube Music search (including InnerTube's internal retries). */
   private const val SEARCH_TIMEOUT_SECONDS = 15L
 
-  /** Metadata queries tried before the pipeline gives up on search-only identification. */
+  /** Official-metadata queries tried before moving to fingerprinting. */
   private const val MAX_METADATA_QUERIES = 3
 
-  /** Weak (caption-line) queries tried after fingerprinting said nothing. */
-  private const val MAX_WEAK_QUERIES = 2
+  /** Timeout for the Instagram embed-page attribution fetch (seconds). */
+  private const val ATTRIBUTION_TIMEOUT_SECONDS = 8L
 
   /** Reel URLs accepted by the importer. */
   private val REEL_URL_REGEX =
@@ -104,7 +107,7 @@ object ReelMatcher {
     val uploader: String?,
     val thumbnailUrl: String?,
     val durationSeconds: Int,
-    /** Full caption/description when available; often names the song. */
+    /** Full caption/description when available. Not used for matching (unreliable). */
     val caption: String? = null,
     /** Track title reported by Instagram's audio metadata, when available. */
     val track: String? = null,
@@ -140,31 +143,35 @@ object ReelMatcher {
 
       val info = fetchReelInfo(reelUrl) ?: return@withContext MatchResult.Error("Reel could not be fetched")
 
-      // Hints are ranked: strong ones name the song on their own (markers, ♪ fragments,
-      // quotes, Instagram track fields); weak ones (caption lines, placeholder title)
-      // often don't name it at all. Weak guesses are tried only AFTER the reel's actual
-      // audio has been fingerprinted, so junk captions can never beat the audio.
-      val (strongHints, weakHints) = run {
-        val ranked = ReelTitleParser.rankedQueryCandidates(info.title, info.caption)
-        val trackCombo = info.track?.let { track ->
-          listOfNotNull(track, info.artist, info.album).joinToString(" ").trim().takeIf { it.isNotBlank() }
+      // Official metadata only: yt-dlp's track/artist/album fields (Instagram's audio
+      // attribution), optionally enriched from Instagram's embed page. Captions are
+      // deliberately NOT used — creators routinely misname or omit the song.
+      val ytDlpOfficial = ReelTitleParser.officialQueryCandidates(info.track, info.artist, info.album)
+      val officialQueries =
+        ytDlpOfficial.ifEmpty {
+          // Attribution missing from yt-dlp JSON (common for most reels): try Instagram's
+          // own embed page, which carries the official audio-artist line.
+          val attribution =
+            run {
+              ReelImportState.report(ReelImportStage.FETCHING_METADATA)
+              fetchOfficialAttribution(reelUrl)
+            }
+          if (attribution != null) listOf(attribution) else emptyList()
         }
-        (listOfNotNull(trackCombo) + ranked.first).distinct() to ranked.second
-      }
 
-      // Stage 1 — search strong metadata hints.
+      // Stage 1 — search official audio metadata.
       var searchFailed = false
-      if (strongHints.isNotEmpty()) {
+      if (officialQueries.isNotEmpty()) {
         ReelImportState.report(ReelImportStage.MATCHING)
-        for (query in strongHints.take(MAX_METADATA_QUERIES)) {
+        for (query in officialQueries.take(MAX_METADATA_QUERIES)) {
           // Show the live query so long stages are never a blind spinner.
           ReelImportState.update { it.copy(searchQuery = query) }
           val candidates = searchYouTubeMusic(query)
           when {
             candidates == null -> searchFailed = true // network/timeout — emptiness proves nothing
             candidates.isNotEmpty() -> {
-              Timber.tag("ReelMatcher").i("Strong query \"%s\" matched: %s", query, candidates.first().title)
-              return@withContext MatchResult.TitleFallback(candidates, info.title)
+              Timber.tag("ReelMatcher").i("Official query \"%s\" matched: %s", query, candidates.first().title)
+              return@withContext MatchResult.TitleFallback(candidates, query)
             }
           }
         }
@@ -179,13 +186,17 @@ object ReelMatcher {
         val recognition = fingerprintResult.getOrNull()
 
         if (recognition != null) {
-          val resolved = resolveOnYouTubeMusic(recognition, info.title)
+          val recognitionLabel =
+            listOfNotNull(recognition.title, recognition.artist).joinToString(" · ").trim()
+          val resolved = resolveOnYouTubeMusic(recognition, recognitionLabel)
           if (resolved != null) return@withContext resolved
           // Fingerprint matched a song that isn't on YT Music — search its name directly
           // (the placeholder reel title would only shadow it).
           val query = "${recognition.title} ${recognition.artist}".trim()
           val candidates = searchYouTubeMusic(query).orEmpty()
-          if (candidates.isNotEmpty()) return@withContext MatchResult.TitleFallback(candidates, info.title)
+          if (candidates.isNotEmpty()) {
+            return@withContext MatchResult.TitleFallback(candidates, recognitionLabel)
+          }
         } else {
           fingerprintResult.exceptionOrNull()?.let {
             Timber.tag("ReelMatcher").e(it, "Fingerprinting failed")
@@ -195,23 +206,9 @@ object ReelMatcher {
         Timber.tag("ReelMatcher").w("YouTube Music unreachable — skipping extraction/fingerprinting")
       }
 
-      // Stage 3 — weak metadata hints (raw caption lines / cleaned title). Reached only
-      // when the audio said nothing; weaker than the audio, stronger than giving up.
-      if (!searchFailed && weakHints.isNotEmpty()) {
-        ReelImportState.report(ReelImportStage.MATCHING)
-        for (query in weakHints.take(MAX_WEAK_QUERIES)) {
-          ReelImportState.update { it.copy(searchQuery = query) }
-          val candidates = searchYouTubeMusic(query)
-          if (candidates != null && candidates.isNotEmpty()) {
-            Timber.tag("ReelMatcher").i("Weak query \"%s\" matched: %s", query, candidates.first().title)
-            return@withContext MatchResult.TitleFallback(candidates, info.title)
-          }
-        }
-      }
-
-      // Stage 4 — never dead-end: hand the best mined hint to the picker, prefilled
-      // into the manual search box so the user can correct it in one tap.
-      val hint = (strongHints + weakHints).firstOrNull().orEmpty()
+      // Stage 3 — captions are never used for matching. Hand the official attribution
+      // (when known) to the picker so manual search starts from something meaningful.
+      val hint = officialQueries.firstOrNull().orEmpty()
       MatchResult.TitleFallback(emptyList(), hint.ifBlank { info.title })
     }
 
@@ -385,6 +382,32 @@ object ReelMatcher {
         // yt-dlp may leave sibling files from interrupted runs.
         context.cacheDir.listFiles()?.filter { it.name.startsWith("reel_excerpt_") }?.forEach { it.delete() }
       }
+    }
+
+  /**
+   * Fetches Instagram's web app embed page for the reel and extracts the official audio
+   * attribution ("audio attributed to …" or the artist line Instagram renders).
+   * Returns null when unavailable — never guesses from creator captions.
+   */
+  private suspend fun fetchOfficialAttribution(reelUrl: String): String? =
+    withContext(Dispatchers.IO) {
+      runCatching {
+        withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
+          val request = okhttp3.Request.Builder().url(reelUrl).header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36").build()
+          okhttp3.OkHttpClient.Builder()
+            .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+            .build()
+            .newCall(request)
+            .execute()
+            .use { response ->
+              if (!response.isSuccessful) return@withTimeoutOrNull null
+              ReelTitleParser.extractOfficialAttribution(response.body?.string().orEmpty())
+            }
+        }
+      }
+        .onFailure { Timber.tag("ReelMatcher").d(it, "Attribution fetch failed for %s", reelUrl) }
+        .getOrNull()
     }
 
   /** Maps a Shazam match to the same track on YouTube Music. */
