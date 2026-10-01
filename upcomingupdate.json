@@ -4,6 +4,10 @@
     "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap."
   ],
   "bug_fixes": [
+    "Creating a playlist from the reel import flow now reliably adds the song to it — previously the playlist creation could be cancelled before it was saved, leaving the song stranded with a “Couldn't find that song.” error.",
+    "Reel Import no longer dead-ends when identification fails: you can jump straight into manual search, and the failure screen tells you what to do next instead of offering a pointless button.",
+    "Sharing another reel while the import screen shows a previous result now starts the new import immediately instead of being silently ignored.",
+    "Creating a synced playlist while offline no longer crashes — it falls back to a local playlist.",
     "Reel Import now saves every imported song to Recognised Songs (Echo Find history), even when the match came from the caption rather than the fingerprint.",
     "The manual-search box no longer keeps the previous reel's search text when you import another reel.",
     "The playlist picker in Reel Import now offers “Create playlist”, so a fresh install can add the first song without leaving the flow.",

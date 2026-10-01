@@ -92,9 +92,11 @@ fun ReelImportScreen(
     pendingSong = song
   }
 
-  // Auto-start when opened with a shared reel link.
+  // Auto-start whenever a reel link arrives — including while the screen shows a
+  // previous import's result (Finished/Failed/picker), so a fresh share is never
+  // silently ignored. The ViewModel decides whether to start or keep an in-flight run.
   LaunchedEffect(initialReelUrl) {
-    if (!initialReelUrl.isNullOrBlank() && uiState is ReelImportUiState.Idle) {
+    if (!initialReelUrl.isNullOrBlank()) {
       viewModel.startFromLink(initialReelUrl)
     }
   }
@@ -163,7 +165,15 @@ fun ReelImportScreen(
             },
           )
 
-        is ReelImportUiState.Failed -> FailedContent(state.reason) { viewModel.reset() }
+        is ReelImportUiState.Failed ->
+          FailedContent(
+            reason = state.reason,
+            onSearchManually = { viewModel.startManualSearch() },
+            onClose = {
+              viewModel.reset()
+              navController.navigateUp()
+            },
+          )
       }
     }
 
@@ -184,6 +194,10 @@ fun ReelImportScreen(
     if (showCreatePlaylist) {
       CreatePlaylistDialog(
         onDismiss = { showCreatePlaylist = false },
+        // Keep the dialog composed until the playlist insert finishes: the OK button
+        // normally dismisses BEFORE running onDone, which cancels the insert
+        // coroutine mid-flight and leaves the song without a target playlist.
+        autoDismiss = false,
         onPlaylistCreated = { playlistId ->
           showCreatePlaylist = false
           pendingSong?.let { song ->
@@ -241,6 +255,12 @@ private fun IdleContent() {
       text = stringResource(R.string.reel_import),
       style = MaterialTheme.typography.titleLarge,
       color = MaterialTheme.colorScheme.onSurface,
+    )
+    Text(
+      text = stringResource(R.string.reel_import_share_hint),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = TextAlign.Center,
     )
   }
 }
@@ -669,7 +689,11 @@ private fun FinishedContent(
 }
 
 @Composable
-private fun FailedContent(reason: ReelImportStage, onRetry: () -> Unit) {
+private fun FailedContent(
+  reason: ReelImportStage,
+  onSearchManually: () -> Unit,
+  onClose: () -> Unit,
+) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(16.dp),
@@ -692,8 +716,17 @@ private fun FailedContent(reason: ReelImportStage, onRetry: () -> Unit) {
       color = MaterialTheme.colorScheme.onSurface,
       textAlign = TextAlign.Center,
     )
-    TextButton(onClick = onRetry) {
-      Text(stringResource(R.string.reel_import_try_different_reel))
+    Text(
+      text = stringResource(R.string.reel_import_failed_hint),
+      style = MaterialTheme.typography.bodyMedium,
+      color = MaterialTheme.colorScheme.onSurfaceVariant,
+      textAlign = TextAlign.Center,
+    )
+    Button(onClick = onSearchManually) {
+      Text(stringResource(R.string.reel_import_search_manually))
+    }
+    TextButton(onClick = onClose) {
+      Text(stringResource(R.string.reel_import_close))
     }
   }
 }
