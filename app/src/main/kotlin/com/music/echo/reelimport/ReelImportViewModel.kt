@@ -122,7 +122,10 @@ constructor(
 
   /** Entry point from a shared Instagram link (raw share text or a bare URL). */
   fun startFromLink(rawTextOrUrl: String) {
-    val url = ReelTitleParser.extractUrl(rawTextOrUrl) ?: rawTextOrUrl.trim()
+    val rawUrl = ReelTitleParser.extractUrl(rawTextOrUrl) ?: rawTextOrUrl.trim()
+    // Canonicalize: shared links carry tracking params (e.g. Instagram's `?stkn=…`)
+    // that break extraction and attribution fetches; the bare URL is always enough.
+    val url = ReelTitleParser.canonicalReelUrl(rawUrl)
     if (!ReelMatcher.isSupportedReelUrl(url)) {
       _uiState.value = ReelImportUiState.Failed(ReelImportStage.NOT_A_REEL)
       return
@@ -144,7 +147,7 @@ constructor(
       when (val result = ReelMatcher.match(context, url)) {
         is ReelMatcher.MatchResult.Matched -> {
           pendingRecognition = result.recognition
-          ReelImportState.update {
+          ReelImportState.update(url) {
             it.copy(reelTitle = result.reelTitle, stage = ReelImportStage.AWAITING_CONFIRM)
           }
           _uiState.value =

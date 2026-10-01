@@ -165,7 +165,7 @@ object ReelMatcher {
         ReelImportState.report(ReelImportStage.MATCHING)
         for (query in officialQueries.take(MAX_METADATA_QUERIES)) {
           // Show the live query so long stages are never a blind spinner.
-          ReelImportState.update { it.copy(searchQuery = query) }
+          ReelImportState.update(reelUrl) { it.copy(searchQuery = query) }
           val candidates = searchYouTubeMusic(query)
           when {
             candidates == null -> searchFailed = true // network/timeout — emptiness proves nothing
@@ -402,7 +402,16 @@ object ReelMatcher {
             .execute()
             .use { response ->
               if (!response.isSuccessful) return@withTimeoutOrNull null
-              ReelTitleParser.extractOfficialAttribution(response.body?.string().orEmpty())
+              // Only parse HTML pages: Instagram sometimes answers API-style requests
+              // with JSON ("application/json") bodies that contain no attribution.
+              val contentType = response.header("Content-Type").orEmpty()
+              if (!contentType.contains("text/html", ignoreCase = true)) {
+                Timber.tag("ReelMatcher").d("Attribution fetch got non-HTML response (%s)", contentType)
+                return@withTimeoutOrNull null
+              }
+              val body = response.body?.string().orEmpty().trimStart()
+              if (!body.startsWith("<")) return@withTimeoutOrNull null
+              ReelTitleParser.extractOfficialAttribution(body)
             }
         }
       }
