@@ -4,6 +4,8 @@
     "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap."
   ],
   "bug_fixes": [
+    "Reel Import no longer guesses the song from creator captions: it uses Instagram's official audio metadata (track/artist, fetched from the reel page when needed) first, then fingerprints the actual audio — captions routinely misname or omit the song.",
+    "Fixed a crash when adding a reel's song to a playlist that no longer exists (e.g. a stale default playlist was deleted) — it now falls back to the playlist picker instead of crashing.",
     "Creating a playlist from the reel import flow now reliably adds the song to it — previously the playlist creation could be cancelled before it was saved, leaving the song stranded with a “Couldn't find that song.” error.",
     "Reel Import no longer dead-ends when identification fails: you can jump straight into manual search, and the failure screen tells you what to do next instead of offering a pointless button.",
     "Sharing another reel while the import screen shows a previous result now starts the new import immediately instead of being silently ignored.",

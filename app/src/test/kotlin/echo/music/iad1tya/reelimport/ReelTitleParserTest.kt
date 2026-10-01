@@ -28,14 +28,14 @@ class ReelTitleParserTest {
 
   @Test
   fun `cleans on-instagram prefix`() {
-    val title = "john.doe on Instagram: \"Midnight City - M83\""
-    assertEquals("Midnight City - M83", ReelTitleParser.clean(title))
+    val title = "some.creator on Instagram: \"Some Song Title - Some Artist\""
+    assertEquals("Some Song Title - Some Artist", ReelTitleParser.clean(title))
   }
 
   @Test
   fun `removes hashtags and mentions`() {
-    val title = "SZA - Kill Bill #reels #viral @sza"
-    assertEquals("SZA - Kill Bill", ReelTitleParser.clean(title))
+    val title = "Some Artist - Some Song #reels #viral @someartist"
+    assertEquals("Some Artist - Some Song", ReelTitleParser.clean(title))
   }
 
   @Test
@@ -58,20 +58,20 @@ class ReelTitleParserTest {
 
   @Test
   fun `song marker hint wins over caption noise`() {
-    val caption = "POV: late night drive\n\nsong: Anirudh - Hukum\n#trending #reels"
-    assertEquals("Anirudh - Hukum", ReelTitleParser.extractSongHint("x on Instagram: \"vibes\"", caption))
+    val caption = "POV: late night drive\n\nsong: Artist One - Great Track\n#trending #reels"
+    assertEquals("Artist One - Great Track", ReelTitleParser.extractSongHint("x on Instagram: \"vibes\"", caption))
   }
 
   @Test
   fun `music emoji fragment becomes a candidate`() {
-    val caption = "new edit 🎵 Blinding Lights - The Weeknd 🎵"
-    assertEquals("Blinding Lights - The Weeknd", ReelTitleParser.extractSongHint(null, caption))
+    val caption = "new edit 🎵 Summer Nights - Some Singer 🎵"
+    assertEquals("Summer Nights - Some Singer", ReelTitleParser.extractSongHint(null, caption))
   }
 
   @Test
   fun `quoted fragment is a candidate`() {
-    val hint = ReelTitleParser.extractSongHint("caption about a \"Dil To Pagal Hai\" scene", null)
-    assertEquals("Dil To Pagal Hai", hint)
+    val hint = ReelTitleParser.extractSongHint("caption about a \"Some Movie Title\" scene", null)
+    assertEquals("Some Movie Title", hint)
   }
 
   @Test
@@ -81,15 +81,15 @@ class ReelTitleParserTest {
 
   @Test
   fun `query candidates are ordered and deduplicated`() {
-    val caption = "song: Kesariya - Arijit Singh\n\nsong: Kesariya - Arijit Singh #love"
+    val caption = "song: Golden Hour - Artist Two\n\nsong: Golden Hour - Artist Two #love"
     val candidates = ReelTitleParser.queryCandidates("reel title", caption)
-    assertEquals("Kesariya - Arijit Singh", candidates.first())
-    assertEquals(1, candidates.count { it == "Kesariya - Arijit Singh" })
+    assertEquals("Golden Hour - Artist Two", candidates.first())
+    assertEquals(1, candidates.count { it == "Golden Hour - Artist Two" })
   }
 
   @Test
   fun `cleaned title is always the last candidate`() {
-    val candidates = ReelTitleParser.queryCandidates("john.doe on Instagram: \"chill vibes\"", null)
+    val candidates = ReelTitleParser.queryCandidates("some.creator on Instagram: \"chill vibes\"", null)
     assertEquals("chill vibes", candidates.last())
   }
 
@@ -100,43 +100,43 @@ class ReelTitleParserTest {
 
   @Test
   fun `song credit label is stripped from caption line`() {
-    val caption = "Some intro text\n\n🎵 Song Name : Yeh Ishq Hai\n🎬 Movie Name : Jab We Met (2007)"
+    val caption = "Some intro text\n\n🎵 Song Name : Some Song Title\n🎬 Movie Name : Some Movie (2007)"
     val candidates = ReelTitleParser.queryCandidates(null, caption)
-    assertEquals("Yeh Ishq Hai", candidates.first())
+    assertEquals("Some Song Title", candidates.first())
   }
 
   @Test
   fun `stacked credit labels are peeled`() {
     assertEquals(
-      "Pritam",
-      ReelTitleParser.extractSongHint("Music / Composer : Pritam", null),
+      "Some Composer",
+      ReelTitleParser.extractSongHint("Music / Composer : Some Composer", null),
     )
   }
 
   @Test
   fun `real credits caption mines the song first`() {
     val caption =
-      "“Yeh Ishq Hai” is a popular song from the Bollywood film “Jab We Met” . It was released in 2007and composed by Pritam .\n\n" +
+      "“Some Song Title” is a popular song from the film “Some Movie” . It was released in 2007and composed by Some Composer .\n\n" +
         "✨ Song Credits________\n" +
-        "🎵 Song Name : Yeh Ishq Hai\n" +
-        "🎬 Movie Name : Jab We Met (2007)\n" +
-        "🎙️ Singers : Shreya Ghoshal\n" +
-        "🎼 Music / Composer : Pritam\n" +
-        "📝 Lyrics / Lyricist : Irshad Kamil\n" +
-        "👥 Actors picturised : Kareena Kapoor Khan, Shahid Kapoor\n" +
-        "📀 Music Label : T-Series\n\n" +
-        "#YehIshqHai #JabWeMet #KareenaKapoor #ShahidKapoor #ShreyaGhoshal"
-    val candidates = ReelTitleParser.queryCandidates("Video by my.playlistshare", caption)
-    assertEquals("Yeh Ishq Hai", candidates.first())
+        "🎵 Song Name : Some Song Title\n" +
+        "🎬 Movie Name : Some Movie (2007)\n" +
+        "🎙️ Singers : Some Singer\n" +
+        "🎼 Music / Composer : Some Composer\n" +
+        "📝 Lyrics / Lyricist : Some Lyricist\n" +
+        "👥 Actors picturised : Some Actor, Another Actor\n" +
+        "📀 Music Label : Some Label\n\n" +
+        "#SomeSongTitle #SomeMovie #SomeSinger #SomeComposer"
+    val candidates = ReelTitleParser.queryCandidates("Video by some.playlistshare", caption)
+    assertEquals("Some Song Title", candidates.first())
     // Caption lines like the movie/actor credits follow as weaker candidates.
-    assertTrue(candidates.any { it.contains("Jab We Met") })
+    assertTrue(candidates.any { it.contains("Some Movie") })
     // The credit label itself must never leak into a query.
     assertTrue(candidates.none { it.startsWith("Song Name") })
   }
 
   @Test
   fun `movie credit line is not confused with a song`() {
-    val candidates = ReelTitleParser.queryCandidates(null, "🎬 Movie Name : Jab We Met (2007)")
+    val candidates = ReelTitleParser.queryCandidates(null, "🎬 Movie Name : Some Movie (2007)")
     // The movie title stays a candidate (weak), but the label itself is stripped.
     assertTrue(candidates.all { !it.startsWith("Movie") })
   }
@@ -147,8 +147,8 @@ class ReelTitleParserTest {
     // nothing here may count as a strong hint that would win over fingerprinting.
     val (strong, weak) =
       ReelTitleParser.rankedQueryCandidates(
-        "Video by abdulrehmankolsawala123",
-        "Breathless song\n.\n.\n#instagram #trending #reel #viral #song",
+        "Video by some_user_123",
+        "Sad song\n.\n.\n#instagram #trending #reel #viral #song",
       )
     assertTrue(strong.isEmpty())
     assertTrue(weak.isNotEmpty())
@@ -173,18 +173,61 @@ class ReelTitleParserTest {
 
   @Test
   fun `song marker is a strong hint`() {
-    val (strong, _) = ReelTitleParser.rankedQueryCandidates(null, "song: Kesariya - Arijit Singh")
-    assertEquals(listOf("Kesariya - Arijit Singh"), strong)
+    val (strong, _) = ReelTitleParser.rankedQueryCandidates(null, "song: Golden Hour - Artist Two")
+    assertEquals(listOf("Golden Hour - Artist Two"), strong)
   }
 
   @Test
   fun `foreign caption without markers stays weak`() {
     val (strong, _) =
       ReelTitleParser.rankedQueryCandidates(
-        "Video by queen_meghna_9876",
+        "Video by some_user_9876",
         "的现场表演。以独特时尚造型而闻名的他,这次依旧保持一贯的高级感",
       )
     assertTrue(strong.isEmpty())
     // The line itself may be kept as a weak fallback, but never as strong.
+  }
+
+  @Test
+  fun `official queries are ordered track-artist first`() {
+    val queries = ReelTitleParser.officialQueryCandidates("Some Track", "Some Artist", null)
+    assertEquals(listOf("Some Track Some Artist", "Some Track", "Some Artist"), queries)
+  }
+
+  @Test
+  fun `official queries empty without metadata`() {
+    assertTrue(ReelTitleParser.officialQueryCandidates(null, null, null).isEmpty())
+  }
+
+  @Test
+  fun `official queries skip duplicate album`() {
+    val queries = ReelTitleParser.officialQueryCandidates("Same Track", null, "Same Track")
+    assertEquals(listOf("Same Track"), queries)
+  }
+
+  @Test
+  fun `official queries sanitize credit labels`() {
+    val queries = ReelTitleParser.officialQueryCandidates("Song Name : Some Song Title", null, null)
+    assertEquals(listOf("Some Song Title"), queries)
+  }
+
+  @Test
+  fun `official attribution found in attributed-to phrasing`() {
+    val html = "<html>noise\nAudio attributed to Artist One, Artist Two\nmore noise</html>"
+    val attribution = ReelTitleParser.extractOfficialAttribution(html)
+    assertTrue(attribution != null && attribution.contains("Artist One"))
+  }
+
+  @Test
+  fun `official attribution falls back to longest standalone line`() {
+    val html = "<html>\n  \nSome Song\nArtist One, Artist Two\n</html>"
+    val attribution = ReelTitleParser.extractOfficialAttribution(html)
+    assertTrue(attribution != null && attribution.contains("Artist Two"))
+  }
+
+  @Test
+  fun `official attribution null for empty or noise-only html`() {
+    assertNull(ReelTitleParser.extractOfficialAttribution(""))
+    assertNull(ReelTitleParser.extractOfficialAttribution("<html>   \n  \n</html>"))
   }
 }
