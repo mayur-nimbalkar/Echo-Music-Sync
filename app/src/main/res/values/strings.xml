@@ -233,7 +233,7 @@
     <string name="reel_import_step_match">Matching on YouTube Music</string>
     <string name="reel_import_pick_title">Is this the song from your reel?</string>
     <string name="reel_import_more_results">+%d more — refine your search to see them</string>
-    <string name="reel_import_source_fingerprint">Identified from the reel's audio</string>
+    <string name="reel_import_source_fingerprint">Identified from the reel\'s audio</string>
     <string name="reel_import_source_official">Official Instagram audio</string>
 
     <string name="edit_artist">Edit artist</string>
