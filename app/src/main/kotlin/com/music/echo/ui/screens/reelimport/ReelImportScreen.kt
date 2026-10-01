@@ -487,7 +487,8 @@ private fun CandidatePickerContent(
  * Playlist chooser. Turning on "add future reels without asking" arms the picker; the next
  * playlist tapped becomes both the target for this song and the remembered default.
  */
-@Composableprivate fun PlaylistPickerDialog(
+@Composable
+private fun PlaylistPickerDialog(
   playlists: List<Playlist>,
   defaultPlaylistId: String,
   onDismiss: () -> Unit,
