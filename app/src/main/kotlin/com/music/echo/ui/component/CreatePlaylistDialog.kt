@@ -40,6 +40,7 @@ fun CreatePlaylistDialog(
   initialTextFieldValue: String? = null,
   allowSyncing: Boolean = true,
   isLocal: Boolean = false,
+  autoDismiss: Boolean = true,
   onPlaylistCreated: ((String) -> Unit)? = null,
 ) {
   val database = LocalDatabase.current
@@ -54,11 +55,19 @@ fun CreatePlaylistDialog(
     title = { Text(text = stringResource(R.string.create_playlist)) },
     initialTextFieldValue = TextFieldValue(initialTextFieldValue ?: ""),
     onDismiss = onDismiss,
+    autoDismiss = autoDismiss,
     onDone = { playlistName ->
       coroutineScope.launch(Dispatchers.IO) {
         val browseId =
           if (syncedPlaylist && isSignedIn) {
-            YouTube.createPlaylist(playlistName)
+            // A failed remote create must never crash the flow — fall back to a
+            // local-only playlist so the user's song still has somewhere to go.
+            runCatching { YouTube.createPlaylist(playlistName) }
+              .onFailure {
+                Logger.getLogger("CreatePlaylistDialog")
+                  .warning("Remote playlist creation failed: ${it.message}")
+              }
+              .getOrNull()
           } else if (syncedPlaylist) {
             Logger.getLogger("CreatePlaylistDialog").warning("Not signed in")
             return@launch

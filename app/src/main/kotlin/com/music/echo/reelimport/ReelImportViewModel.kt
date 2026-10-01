@@ -20,6 +20,7 @@ import echo.music.iad1tya.utils.dataStore
 import java.time.LocalDateTime
 import javax.inject.Inject
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -85,6 +86,15 @@ constructor(
   private var lastAddedPlaylistId: String? = null
   private var lastAddedPlaylistName: String? = null
 
+  /** In-flight identification; a newly shared reel cancels the previous run. */
+  private var matchJob: Job? = null
+
+  /** In-flight manual search; cancelled when a new import or search starts. */
+  private var searchJob: Job? = null
+
+  /** URL of the run whose pipeline reports should update the UI; filters stale reports. */
+  private var currentRunUrl: String? = null
+
   init {
     viewModelScope.launch {
       defaultPlaylistId.value = context.dataStore.data.first()[ReelImportDefaultPlaylistIdKey].orEmpty()
@@ -94,6 +104,8 @@ constructor(
     viewModelScope.launch {
       ReelImportState.current.collect { pending ->
         val stage = pending?.stage ?: return@collect
+        // Ignore leftover reports from a previous run/screen instance.
+        if (pending.reelUrl != currentRunUrl) return@collect
         if (
           stage == ReelImportStage.FETCHING_METADATA ||
             stage == ReelImportStage.EXTRACTING ||
@@ -115,13 +127,20 @@ constructor(
       _uiState.value = ReelImportUiState.Failed(ReelImportStage.NOT_A_REEL)
       return
     }
-    if (_uiState.value is ReelImportUiState.Working) return
+    // Same reel already being processed: nothing to do. A different reel (or a
+    // previous result still on screen): cancel whatever is in flight and restart.
+    val inFlight = ReelImportState.current.value
+    if (_uiState.value is ReelImportUiState.Working && inFlight?.reelUrl == url) return
 
+    matchJob?.cancel()
+    searchJob?.cancel()
     pendingRecognition = null
+    currentRunUrl = url
     ReelImportState.begin(url)
     _uiState.value = ReelImportUiState.Working(ReelImportStage.FETCHING_METADATA)
 
-    viewModelScope.launch(Dispatchers.IO) {
+    matchJob =
+      viewModelScope.launch(Dispatchers.IO) {
       when (val result = ReelMatcher.match(context, url)) {
         is ReelMatcher.MatchResult.Matched -> {
           pendingRecognition = result.recognition
@@ -240,7 +259,9 @@ constructor(
   fun manualSearch(query: String) {
     val trimmed = query.trim()
     if (trimmed.isEmpty()) return
-    viewModelScope.launch(Dispatchers.IO) {
+    searchJob?.cancel()
+    searchJob =
+      viewModelScope.launch(Dispatchers.IO) {
       _uiState.value = ReelImportUiState.Searching(trimmed)
       val candidates = ReelMatcher.search(trimmed)
       _uiState.value =
@@ -251,6 +272,15 @@ constructor(
           ReelImportUiState.PickCandidate(candidates, trimmed)
         }
     }
+  }
+
+  /** Jumps straight into manual search from a failed import — never a dead end. */
+  fun startManualSearch() {
+    matchJob?.cancel()
+    searchJob?.cancel()
+    currentRunUrl = null
+    ReelImportState.clear()
+    _uiState.value = ReelImportUiState.PickCandidate(emptyList(), "")
   }
 
   fun setDefaultPlaylist(id: String) {
@@ -329,6 +359,7 @@ constructor(
     pendingRecognition = null
     lastAddedPlaylistId = null
     lastAddedPlaylistName = null
+    currentRunUrl = null
     _relatedSongs.value = emptyList()
     _addedRelatedIds.value = emptySet()
     ReelImportState.clear()
