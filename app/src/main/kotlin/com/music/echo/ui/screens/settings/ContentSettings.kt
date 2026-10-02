@@ -895,7 +895,7 @@ fun ContentSettings(
         singleLine = true,
         onDone = { value ->
           onInstagramSessionChange(value.trim())
-          ReelMatcher.setSessionId(context, value.trim())
+          ReelMatcher.setSessionId(value.trim())
           if (value.isNotBlank()) {
             scope.launch(Dispatchers.IO) {
               val ok = ReelMatcher.testSession()

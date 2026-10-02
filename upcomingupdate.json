@@ -4,6 +4,9 @@
     "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap."
   ],
   "bug_fixes": [
+    "Reel Import no longer prefills the manual search box with the uploader's Instagram handle: when identification fails, the search box now starts from the best song-name hint found (official audio attribution, then the caption's song marker/lyric fragment), and the same hint is kept when the app asks you to set up an Instagram session.",
+    "Reel Import gained one more identification stage: when official audio metadata and fingerprinting both come up empty, the creator's caption is now searched for the song and any results are offered as candidates in the picker (never confirmed automatically).",
+    "Reel Import cleanup: one shared HTTP client and one cookie builder instead of rebuilding them per request, duplicated session/shortcode parsing removed, and unused reel-metadata fields and the never-returned no-match result deleted.",
     "Instagram session handling fixed and hardened: the setting now accepts the whole cookie line (sessionid=…; ds_user_id=…) as well as a bare sessionid, and the app API is called with both sessionid and ds_user_id — the previous build sent a malformed cookie pair, which is why sessions were rejected.",
     "The session test now checks the real logged-in account endpoint instead of a generic one, so a green result means the session actually works for metadata lookups.",
     "Reel Import can now use your own Instagram session: add your sessionid cookie in Settings → Content → Instagram session and metadata lookups run with your logged-in access instead of being blocked (403) — this also makes the official audio API and the reel page work on any network.",

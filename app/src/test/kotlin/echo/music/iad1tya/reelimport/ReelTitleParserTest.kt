@@ -253,4 +253,42 @@ class ReelTitleParserTest {
     assertTrue(!ReelTitleParser.isPlausibleTrackTitle("///"))
     assertTrue(!ReelTitleParser.isPlausibleTrackTitle("12345"))
   }
+
+  @Test
+  fun `song hint is the quoted caption, not the uploader handle`() {
+    assertEquals(
+      "Summer Nights",
+      ReelTitleParser.songNameHint("some.creator on Instagram: \"Summer Nights\"", null),
+    )
+  }
+
+  @Test
+  fun `song hint prefers explicit caption song markers`() {
+    assertEquals(
+      "Golden Hour - Artist Two",
+      ReelTitleParser.songNameHint(null, "song: Golden Hour - Artist Two"),
+    )
+    assertEquals("some lyrics here", ReelTitleParser.songNameHint(null, "pov: summer\n\u266a some lyrics here \u266a\n@x.y"))
+  }
+
+  @Test
+  fun `song hint is empty when only an uploader handle is known`() {
+    assertEquals("", ReelTitleParser.songNameHint("john_doe_99 on Instagram: \"\"", null))
+    assertEquals("", ReelTitleParser.songNameHint(null, "posted by user_1234"))
+    assertEquals("", ReelTitleParser.songNameHint(null, "@cool.uploader"))
+    assertEquals("", ReelTitleParser.songNameHint("{\"a\":1} on Instagram: \"x\"", null))
+    assertEquals("", ReelTitleParser.songNameHint(null, null))
+  }
+
+  @Test
+  fun `short track names that look handle-ish are kept`() {
+    assertEquals("24K Magic", ReelTitleParser.songNameHint(null, "24K Magic"))
+    assertEquals("Mr. Blue Sky", ReelTitleParser.songNameHint(null, "Mr. Blue Sky"))
+    assertTrue(!ReelTitleParser.looksLikeHandle("24K Magic"))
+    assertTrue(!ReelTitleParser.looksLikeHandle("Mr."))
+    assertTrue(ReelTitleParser.looksLikeHandle("user_1234"))
+    assertTrue(ReelTitleParser.looksLikeHandle("@some.creator"))
+    assertTrue(ReelTitleParser.mentionsHandle("posted by user_1234"))
+    assertTrue(!ReelTitleParser.mentionsHandle("Summer Nights"))
+  }
 }
