@@ -73,20 +73,53 @@ object ReelMatcher {
   private const val IG_WEB_APP_ID = "936619743392459"
 
   /**
-   * The user's own Instagram `sessionid` cookie (Settings → Content → Instagram session).
+   * The user's own Instagram session (Settings → Content → Instagram session).
    * When set, Instagram's app endpoints and the embed page treat requests as a logged-in
    * app/browser instead of an anonymous datacenter crawler — the difference between
    * working metadata and 403s. Stored only on-device.
+   *
+   * Accepts a bare `sessionid` value, or a whole cookie line such as
+   * `sessionid=…; ds_user_id=…; csrftoken=…` (parsed below).
    */
   @Volatile private var sessionId: String? = null
+  @Volatile private var dsUserId: String? = null
 
   /** Live-updates the session cookie (called from Settings). */
   fun setSessionId(context: Context, value: String?) {
-    sessionId = value?.trim()?.ifBlank { null }
+    applySession(value)
   }
 
   /** True when a session cookie is configured. */
   fun hasSession(): Boolean = !sessionId.isNullOrBlank()
+
+  /** Parses either a bare sessionid or a cookie line into the session fields. */
+  private fun applySession(raw: String?) {
+    val text = raw?.trim().orEmpty()
+    if (text.isEmpty()) {
+      sessionId = null
+      dsUserId = null
+      return
+    }
+    if (text.contains("sessionid=")) {
+      // Whole cookie line: pull the interesting parts out.
+      sessionId = parseCookieValue(text, "sessionid")
+      dsUserId = parseCookieValue(text, "ds_user_id")
+    } else {
+      sessionId = text
+      dsUserId = null
+    }
+  }
+
+  private fun parseCookieValue(cookieLine: String, name: String): String? {
+    // Tolerate a pasted request header, e.g. "Cookie: sessionid=...; ds_user_id=...".
+    val body = if (cookieLine.trimStart().startsWith("cookie:", ignoreCase = true)) {
+      cookieLine.substringAfter(':')
+    } else {
+      cookieLine
+    }
+    val match = Regex("(?:^|[;\\s])$name=([^;\\s]+)").find(body) ?: return null
+    return match.groupValues[1].trim().ifBlank { null }
+  }
 
   /**
    * Probes a lightweight Instagram endpoint with the current session cookie to check
@@ -96,12 +129,17 @@ object ReelMatcher {
     withContext(Dispatchers.IO) {
       runCatching {
         withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
+          val cookie =
+            buildString {
+              append("sessionid=").append(sessionId.orEmpty())
+              dsUserId?.let { append("; ds_user_id=").append(it) }
+            }
           val request =
             okhttp3.Request.Builder()
-              .url("https://i.instagram.com/api/v1/users/lookup/")
+              .url("https://i.instagram.com/api/v1/accounts/current/?__a=1&__d=1")
               .header("User-Agent", IG_APP_USER_AGENT)
               .header("x-ig-app-id", IG_WEB_APP_ID)
-              .header("Cookie", "sessionid=$sessionId")
+              .header("Cookie", cookie)
               .build()
           val response =
             okhttp3.OkHttpClient.Builder()
@@ -186,7 +224,7 @@ object ReelMatcher {
 
   /** One-time native binary setup. Call from Application startup. */
   fun init(context: Context) {
-    sessionId = context.dataStore[InstagramSessionIdKey]?.trim()?.ifBlank { null }
+    applySession(context.dataStore[InstagramSessionIdKey])
     try {
       YoutubeDL.init(context)
       FFmpeg.init(context)
@@ -539,7 +577,15 @@ object ReelMatcher {
             .header("User-Agent", IG_APP_USER_AGENT)
             .header("x-ig-app-id", IG_WEB_APP_ID)
         // The session cookie is what turns a datacenter-style 403 into app-grade access.
-        sessionId?.let { requestBuilder.header("Cookie", "sessionid=$it; ds_user_id=$it") }
+        // The app API wants both sessionid and ds_user_id (the numeric account id).
+        sessionId?.let { sid ->
+          val cookie =
+            buildString {
+              append("sessionid=").append(sid)
+              dsUserId?.let { append("; ds_user_id=").append(it) }
+            }
+          requestBuilder.header("Cookie", cookie)
+        }
         val request = requestBuilder.build()
         okhttp3.OkHttpClient.Builder()
           .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
