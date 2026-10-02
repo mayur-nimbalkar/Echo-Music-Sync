@@ -8,10 +8,13 @@ import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
+import echo.music.iad1tya.constants.InstagramSessionIdKey
 import echo.music.iad1tya.recognition.AudioResampler
 import echo.music.iad1tya.recognition.DecodedAudio
 import echo.music.iad1tya.recognition.VibraSignature
 import echo.music.iad1tya.utils.reportException
+import echo.music.iad1tya.utils.dataStore
+import echo.music.iad1tya.utils.get
 import java.io.File
 import java.nio.ByteBuffer
 import kotlinx.coroutines.CancellationException
@@ -70,6 +73,52 @@ object ReelMatcher {
   private const val IG_WEB_APP_ID = "936619743392459"
 
   /**
+   * The user's own Instagram `sessionid` cookie (Settings → Content → Instagram session).
+   * When set, Instagram's app endpoints and the embed page treat requests as a logged-in
+   * app/browser instead of an anonymous datacenter crawler — the difference between
+   * working metadata and 403s. Stored only on-device.
+   */
+  @Volatile private var sessionId: String? = null
+
+  /** Live-updates the session cookie (called from Settings). */
+  fun setSessionId(context: Context, value: String?) {
+    sessionId = value?.trim()?.ifBlank { null }
+  }
+
+  /** True when a session cookie is configured. */
+  fun hasSession(): Boolean = !sessionId.isNullOrBlank()
+
+  /**
+   * Probes a lightweight Instagram endpoint with the current session cookie to check
+   * whether it is still valid. Used by the Settings screen after saving a cookie.
+   */
+  suspend fun testSession(): Boolean =
+    withContext(Dispatchers.IO) {
+      runCatching {
+        withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
+          val request =
+            okhttp3.Request.Builder()
+              .url("https://i.instagram.com/api/v1/users/lookup/")
+              .header("User-Agent", IG_APP_USER_AGENT)
+              .header("x-ig-app-id", IG_WEB_APP_ID)
+              .header("Cookie", "sessionid=$sessionId")
+              .build()
+          val response =
+            okhttp3.OkHttpClient.Builder()
+              .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+              .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+              .build()
+              .newCall(request)
+              .execute()
+          response.use { it.code != 401 && it.code != 403 }
+        }
+          ?: false
+      }
+        .onFailure { Timber.tag("ReelMatcher").d(it, "Session test failed") }
+        .getOrNull() ?: false
+    }
+
+  /**
    * Instagram mobile app user agent for the media-info endpoint. The desktop web page
    * is login-walled and exposes no audio metadata; the app endpoint returns the official
    * `clips_metadata.music_info` block (song/artist/album) for public reels.
@@ -107,6 +156,13 @@ object ReelMatcher {
     /** Reel exists but no song could be identified. */
     data object NoMatch : MatchResult()
 
+    /**
+     * Nothing matched and no Instagram session is configured — setup would likely
+     * have provided the official metadata that makes identification work. [reelTitle]
+     * carries the best mined hint for the manual-search prefill.
+     */
+    data class NeedsLogin(val reelTitle: String) : MatchResult()
+
     /** yt-dlp is unavailable (first-run binary update failed) or extraction failed. */
     data class Error(val message: String) : MatchResult()
   }
@@ -130,6 +186,7 @@ object ReelMatcher {
 
   /** One-time native binary setup. Call from Application startup. */
   fun init(context: Context) {
+    sessionId = context.dataStore[InstagramSessionIdKey]?.trim()?.ifBlank { null }
     try {
       YoutubeDL.init(context)
       FFmpeg.init(context)
@@ -226,7 +283,14 @@ object ReelMatcher {
       // Stage 3 — captions are never used for matching. Hand the official attribution
       // (when known) to the picker so manual search starts from something meaningful.
       val hint = officialQueries.firstOrNull().orEmpty()
-      MatchResult.TitleFallback(emptyList(), hint.ifBlank { info.title })
+      if (sessionId.isNullOrBlank() && !searchFailed) {
+        // Every stage came up empty with no session cookie: the most common fixable
+        // cause. Suggest setup on the failure screen instead of a generic dead end.
+        Timber.tag("ReelMatcher").i("No match and no Instagram session — suggesting setup")
+        MatchResult.NeedsLogin(hint.ifBlank { info.title })
+      } else {
+        MatchResult.TitleFallback(emptyList(), hint.ifBlank { info.title })
+      }
     }
 
   /** Manual search used by the UI so a failed match never dead-ends the flow. */
@@ -242,6 +306,9 @@ object ReelMatcher {
           request.addOption("--no-playlist")
           request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
           request.addOption("--retries", YTDLP_RETRIES)
+          // With the user's session cookie, Instagram serves yt-dlp as a logged-in
+          // client instead of walling it.
+          sessionId?.let { request.addOption("--add-headers", "Cookie: sessionid=$it") }
           val response = YoutubeDL.getInstance().execute(request)
           if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
           // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
@@ -416,7 +483,13 @@ object ReelMatcher {
     withContext(Dispatchers.IO) {
       runCatching {
         withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
-          val request = okhttp3.Request.Builder().url(reelUrl).header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36").build()
+          val requestBuilder =
+            okhttp3.Request.Builder()
+              .url(reelUrl)
+              .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+          // A session cookie avoids the login wall that strips audio attribution.
+          sessionId?.let { requestBuilder.header("Cookie", "sessionid=$it") }
+          val request = requestBuilder.build()
           okhttp3.OkHttpClient.Builder()
             .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
             .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
@@ -460,12 +533,14 @@ object ReelMatcher {
     val mediaId = shortcodeToMediaId(shortcode) ?: return null
     return runCatching {
       withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
-        val request =
+        val requestBuilder =
           okhttp3.Request.Builder()
             .url("https://i.instagram.com/api/v1/media/$mediaId/info/")
             .header("User-Agent", IG_APP_USER_AGENT)
             .header("x-ig-app-id", IG_WEB_APP_ID)
-            .build()
+        // The session cookie is what turns a datacenter-style 403 into app-grade access.
+        sessionId?.let { requestBuilder.header("Cookie", "sessionid=$it; ds_user_id=$it") }
+        val request = requestBuilder.build()
         okhttp3.OkHttpClient.Builder()
           .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
           .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
@@ -473,7 +548,10 @@ object ReelMatcher {
           .newCall(request)
           .execute()
           .use { response ->
-            if (!response.isSuccessful) return@withTimeoutOrNull null
+            if (!response.isSuccessful) {
+              Timber.tag("ReelMatcher").d("IG media/info returned HTTP %d", response.code)
+              return@withTimeoutOrNull null
+            }
             val body = response.body?.string().orEmpty()
             val json = org.json.JSONObject(body)
             val item = json.optJSONArray("items")?.optJSONObject(0) ?: return@withTimeoutOrNull null
