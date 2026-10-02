@@ -188,7 +188,7 @@ fun ReelImportScreen(
         is ReelImportUiState.Failed ->
           FailedContent(
             reason = state.reason,
-            onSearchManually = { viewModel.startManualSearch() },
+            onSearchManually = { viewModel.searchManuallyFromFailure() },
             onOpenSettings = { navController.navigate("settings/content") },
             onClose = {
               viewModel.reset()

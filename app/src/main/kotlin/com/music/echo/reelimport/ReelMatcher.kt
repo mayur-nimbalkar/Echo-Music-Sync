@@ -34,8 +34,10 @@ import timber.log.Timber
  *    when present — Instagram knows exactly which audio the reel uses.
  * 3. When no official metadata exists (original audio), a short excerpt is fingerprinted with
  *    the same [VibraSignature] used by Echo Find.
- * 4. Anything else lands in the manual-search picker — creator captions are deliberately
- *    ignored because they routinely misname or omit the song.
+ * 4. As a last resort the creator's caption is mined for a song name and searched, but its
+ *    results only ever reach the picker — captions misname songs too often to auto-confirm.
+ * 5. Anything else lands in the manual-search picker, prefilled with the best song-name hint
+ *    available (never the uploader's handle).
  *
  * A public [search] is exposed so the UI always offers a manual escape hatch.
  */
@@ -66,6 +68,13 @@ object ReelMatcher {
   /** Official-metadata queries tried before moving to fingerprinting. */
   private const val MAX_METADATA_QUERIES = 3
 
+  /**
+   * Caption-derived queries tried after fingerprinting failed. Captions name the song
+   * often enough to be worth a couple of lookups, but not often enough to trust —
+   * so they only ever reach the user as candidates in the picker, never as a match.
+   */
+  private const val MAX_CAPTION_QUERIES = 2
+
   /** Timeout for the Instagram embed-page attribution fetch (seconds). */
   private const val ATTRIBUTION_TIMEOUT_SECONDS = 8L
 
@@ -85,12 +94,26 @@ object ReelMatcher {
   @Volatile private var dsUserId: String? = null
 
   /** Live-updates the session cookie (called from Settings). */
-  fun setSessionId(context: Context, value: String?) {
+  fun setSessionId(value: String?) {
     applySession(value)
   }
 
-  /** True when a session cookie is configured. */
-  fun hasSession(): Boolean = !sessionId.isNullOrBlank()
+  /** The cookie header sent with every Instagram request, or null when signed out. */
+  private fun sessionCookie(): String? {
+    val sid = sessionId?.takeIf { it.isNotBlank() } ?: return null
+    return buildString {
+      append("sessionid=").append(sid)
+      dsUserId?.takeIf { it.isNotBlank() }?.let { append("; ds_user_id=").append(it) }
+    }
+  }
+
+  /** One shared client for every Instagram call — building a client per request is pure waste. */
+  private val httpClient: okhttp3.OkHttpClient by lazy {
+    okhttp3.OkHttpClient.Builder()
+      .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+      .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
+      .build()
+  }
 
   /** Parses either a bare sessionid or a cookie line into the session fields. */
   private fun applySession(raw: String?) {
@@ -129,25 +152,14 @@ object ReelMatcher {
     withContext(Dispatchers.IO) {
       runCatching {
         withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
-          val cookie =
-            buildString {
-              append("sessionid=").append(sessionId.orEmpty())
-              dsUserId?.let { append("; ds_user_id=").append(it) }
-            }
           val request =
             okhttp3.Request.Builder()
               .url("https://i.instagram.com/api/v1/accounts/current/?__a=1&__d=1")
               .header("User-Agent", IG_APP_USER_AGENT)
               .header("x-ig-app-id", IG_WEB_APP_ID)
-              .header("Cookie", cookie)
+              .header("Cookie", sessionCookie().orEmpty())
               .build()
-          val response =
-            okhttp3.OkHttpClient.Builder()
-              .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-              .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-              .build()
-              .newCall(request)
-              .execute()
+          val response = httpClient.newCall(request).execute()
           response.use { it.code != 401 && it.code != 403 }
         }
           ?: false
@@ -164,15 +176,22 @@ object ReelMatcher {
   private const val IG_APP_USER_AGENT =
     "Instagram 76.0.0.15.395 Android (29/10; 420dpi; 1080x2400; samsung; SM-A266B; a26x; exynos2100)"
 
-  /** Reel URLs accepted by the importer. */
+  /** Plain browser agent for page fetches and the yt-dlp audio extraction. */
+  private const val IG_BROWSER_USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36"
+
+  /** Reel URLs accepted by the importer; group 1 is the media shortcode. */
   private val REEL_URL_REGEX =
     Regex(
-      "^https?://(?:www\\.|m\\.)?instagram\\.com/(?:reel|reels|p)/[A-Za-z0-9_-]+",
+      "^https?://(?:www\\.|m\\.)?instagram\\.com/(?:reel|reels|p)/([A-Za-z0-9_-]+)",
       RegexOption.IGNORE_CASE,
     )
 
   fun isSupportedReelUrl(url: String?): Boolean =
     url != null && REEL_URL_REGEX.containsMatchIn(url)
+
+  /** The reel's media shortcode, or null when [url] is not a reel link. */
+  private fun shortcodeOf(url: String): String? =
+    REEL_URL_REGEX.find(url)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
 
   sealed class MatchResult {
     /** A confident fingerprint match resolved on YouTube Music. */
@@ -191,9 +210,6 @@ object ReelMatcher {
     /** The link is not a reel (or is private/deleted). */
     data object NotAReel : MatchResult()
 
-    /** Reel exists but no song could be identified. */
-    data object NoMatch : MatchResult()
-
     /**
      * Nothing matched and no Instagram session is configured — setup would likely
      * have provided the official metadata that makes identification work. [reelTitle]
@@ -205,14 +221,10 @@ object ReelMatcher {
     data class Error(val message: String) : MatchResult()
   }
 
-  /** Parsed reel metadata used by the UI. */
-  data class ReelInfo(
-    val url: String,
+  /** Parsed reel metadata. Only the fields the pipeline actually consumes are kept. */
+  private data class ReelInfo(
     val title: String,
-    val uploader: String?,
-    val thumbnailUrl: String?,
-    val durationSeconds: Int,
-    /** Full caption/description when available. Not used for matching (unreliable). */
+    /** Full caption/description. Only mined for song hints (stage 3), never auto-matched. */
     val caption: String? = null,
     /** Track title reported by Instagram's audio metadata, when available. */
     val track: String? = null,
@@ -250,8 +262,8 @@ object ReelMatcher {
       val info = fetchReelInfo(reelUrl) ?: return@withContext MatchResult.Error("Reel could not be fetched")
 
       // Official metadata only: yt-dlp's track/artist/album fields (Instagram's audio
-      // attribution), optionally enriched from Instagram's embed page. Captions are
-      // deliberately NOT used — creators routinely misname or omit the song.
+      // attribution), optionally enriched from Instagram's embed page. Creator captions
+      // are held back for stage 3 — they routinely misname or omit the song.
       val ytDlpOfficial = ReelTitleParser.officialQueryCandidates(info.track, info.artist, info.album)
       val officialQueries =
         ytDlpOfficial.ifEmpty {
@@ -298,17 +310,8 @@ object ReelMatcher {
         val recognition = fingerprintResult.getOrNull()
 
         if (recognition != null) {
-          val recognitionLabel =
-            listOfNotNull(recognition.title, recognition.artist).joinToString(" · ").trim()
-          val resolved = resolveOnYouTubeMusic(recognition, recognitionLabel)
+          val resolved = resolveOnYouTubeMusic(recognition)
           if (resolved != null) return@withContext resolved
-          // Fingerprint matched a song that isn't on YT Music — search its name directly
-          // (the placeholder reel title would only shadow it).
-          val query = "${recognition.title} ${recognition.artist}".trim()
-          val candidates = searchYouTubeMusic(query).orEmpty()
-          if (candidates.isNotEmpty()) {
-            return@withContext MatchResult.TitleFallback(candidates, recognitionLabel)
-          }
         } else {
           fingerprintResult.exceptionOrNull()?.let {
             Timber.tag("ReelMatcher").e(it, "Fingerprinting failed")
@@ -318,16 +321,37 @@ object ReelMatcher {
         Timber.tag("ReelMatcher").w("YouTube Music unreachable — skipping extraction/fingerprinting")
       }
 
-      // Stage 3 — captions are never used for matching. Hand the official attribution
-      // (when known) to the picker so manual search starts from something meaningful.
-      val hint = officialQueries.firstOrNull().orEmpty()
+      // Stage 3 — last look at the creator's own text. A caption song marker often names
+      // the track; results only reach the picker as candidates, never as an auto-match.
+      if (!searchFailed) {
+        val captionQueries = ReelTitleParser.rankedQueryCandidates(info.title, info.caption).second
+        for (query in captionQueries.take(MAX_CAPTION_QUERIES)) {
+          ReelImportState.update(reelUrl) { it.copy(searchQuery = query) }
+          val candidates = searchYouTubeMusic(query)
+          if (candidates == null) {
+            searchFailed = true
+            continue
+          }
+          if (candidates.isNotEmpty()) {
+            Timber.tag("ReelMatcher").i("Caption query \"%s\" produced candidates", query)
+            return@withContext MatchResult.TitleFallback(candidates, query)
+          }
+        }
+      }
+
+      // Nothing identified. Prefill the manual search with the best song-name hint we
+      // have: official attribution first, then the caption, and never the uploader
+      // handle (the picker prefills its search box from this).
+      val hint =
+        officialQueries.firstOrNull()?.takeIf { it.isNotBlank() }
+          ?: ReelTitleParser.songNameHint(info.title, info.caption)
       if (sessionId.isNullOrBlank() && !searchFailed) {
         // Every stage came up empty with no session cookie: the most common fixable
         // cause. Suggest setup on the failure screen instead of a generic dead end.
         Timber.tag("ReelMatcher").i("No match and no Instagram session — suggesting setup")
-        MatchResult.NeedsLogin(hint.ifBlank { info.title })
+        MatchResult.NeedsLogin(hint)
       } else {
-        MatchResult.TitleFallback(emptyList(), hint.ifBlank { info.title })
+        MatchResult.TitleFallback(emptyList(), hint)
       }
     }
 
@@ -335,38 +359,33 @@ object ReelMatcher {
   suspend fun search(query: String): List<SongItem> = searchYouTubeMusic(query.trim()).orEmpty()
 
   /** Fetches reel metadata with yt-dlp (no media download). */
-  private suspend fun fetchReelInfo(url: String): ReelInfo? =
-    withContext(Dispatchers.IO) {
-      ReelImportState.report(ReelImportStage.FETCHING_METADATA)
-      runCatching {
-          val request = YoutubeDLRequest(url)
-          request.addOption("--dump-json")
-          request.addOption("--no-playlist")
-          request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
-          request.addOption("--retries", YTDLP_RETRIES)
-          // With the user's session cookie, Instagram serves yt-dlp as a logged-in
-          // client instead of walling it.
-          sessionId?.let { request.addOption("--add-headers", "Cookie: sessionid=$it") }
-          val response = YoutubeDL.getInstance().execute(request)
-          if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
-          // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
-          val json = org.json.JSONObject(response.out)
-          ReelInfo(
-            url = url,
-            title = json.optString("fulltitle").ifBlank { json.optString("title") },
-            uploader = json.optString("uploader").ifBlank { null },
-            thumbnailUrl = json.optString("thumbnail").ifBlank { null },
-            durationSeconds = json.optInt("duration", 0),
-            // Keep the full caption: song markers like `song:` often sit at the end.
-            caption = json.optString("description").ifBlank { null },
-            track = json.optString("track").ifBlank { json.optString("igtv_track_name") }.ifBlank { null },
-            artist = json.optString("artist").ifBlank { json.optString("igtv_artist_name") }.ifBlank { null },
-            album = json.optString("album").ifBlank { null },
-          )
-        }
-        .onFailure { Timber.tag("ReelMatcher").e(it, "fetchReelInfo failed for %s", url) }
-        .getOrNull()
-    }
+  private suspend fun fetchReelInfo(url: String): ReelInfo? {
+    ReelImportState.report(ReelImportStage.FETCHING_METADATA)
+    return runCatching {
+        val request = YoutubeDLRequest(url)
+        request.addOption("--dump-json")
+        request.addOption("--no-playlist")
+        request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
+        request.addOption("--retries", YTDLP_RETRIES)
+        // With the user's session cookie, Instagram serves yt-dlp as a logged-in
+        // client instead of walling it.
+        sessionCookie()?.let { request.addOption("--add-headers", "Cookie: $it") }
+        val response = YoutubeDL.getInstance().execute(request)
+        if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
+        // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
+        val json = org.json.JSONObject(response.out)
+        ReelInfo(
+          title = json.optString("fulltitle").ifBlank { json.optString("title") },
+          // Keep the full caption: song markers like `song:` often sit at the end.
+          caption = json.optString("description").ifBlank { null },
+          track = json.optString("track").ifBlank { json.optString("igtv_track_name") }.ifBlank { null },
+          artist = json.optString("artist").ifBlank { json.optString("igtv_artist_name") }.ifBlank { null },
+          album = json.optString("album").ifBlank { null },
+        )
+      }
+      .onFailure { Timber.tag("ReelMatcher").e(it, "fetchReelInfo failed for %s", url) }
+      .getOrNull()
+  }
 
   /**
    * Downloads the reel's audio and fingerprints two windows: the start and, when the
@@ -450,7 +469,7 @@ object ReelMatcher {
         request.addOption("--retries", YTDLP_RETRIES)
         // Public reels are usually downloadable anonymously; private ones are not.
         request.addOption("--no-check-certificates")
-        request.addOption("--user-agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+        request.addOption("--user-agent", IG_BROWSER_USER_AGENT)
 
         // The library injects --ffmpeg-location automatically for every execution.
         YoutubeDL.getInstance().execute(request)
@@ -524,14 +543,11 @@ object ReelMatcher {
           val requestBuilder =
             okhttp3.Request.Builder()
               .url(reelUrl)
-              .header("User-Agent", "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36")
+              .header("User-Agent", IG_BROWSER_USER_AGENT)
           // A session cookie avoids the login wall that strips audio attribution.
-          sessionId?.let { requestBuilder.header("Cookie", "sessionid=$it") }
+          sessionCookie()?.let { requestBuilder.header("Cookie", it) }
           val request = requestBuilder.build()
-          okhttp3.OkHttpClient.Builder()
-            .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-            .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-            .build()
+          httpClient
             .newCall(request)
             .execute()
             .use { response ->
@@ -562,13 +578,7 @@ object ReelMatcher {
    * the next stage. This is the same data the Instagram app shows on the audio page.
    */
   private suspend fun fetchOfficialMetadataApi(reelUrl: String): Triple<String, String?, String?>? {
-    val shortcode =
-      Regex("(?:reel|reels|p)/([A-Za-z0-9_-]+)")
-        .find(reelUrl)
-        ?.groupValues
-        ?.get(1)
-        ?: return null
-    val mediaId = shortcodeToMediaId(shortcode) ?: return null
+    val mediaId = shortcodeOf(reelUrl)?.let { shortcodeToMediaId(it) } ?: return null
     return runCatching {
       withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
         val requestBuilder =
@@ -578,19 +588,9 @@ object ReelMatcher {
             .header("x-ig-app-id", IG_WEB_APP_ID)
         // The session cookie is what turns a datacenter-style 403 into app-grade access.
         // The app API wants both sessionid and ds_user_id (the numeric account id).
-        sessionId?.let { sid ->
-          val cookie =
-            buildString {
-              append("sessionid=").append(sid)
-              dsUserId?.let { append("; ds_user_id=").append(it) }
-            }
-          requestBuilder.header("Cookie", cookie)
-        }
+        sessionCookie()?.let { requestBuilder.header("Cookie", it) }
         val request = requestBuilder.build()
-        okhttp3.OkHttpClient.Builder()
-          .connectTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-          .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
-          .build()
+        httpClient
           .newCall(request)
           .execute()
           .use { response ->
@@ -637,15 +637,16 @@ object ReelMatcher {
     return id.toString()
   }
 
-  /** Maps a Shazam match to the same track on YouTube Music. */
-  private suspend fun resolveOnYouTubeMusic(
-    recognition: RecognitionResult,
-    reelTitle: String,
-  ): MatchResult.Matched? {
+  /**
+ * Maps a Shazam match to the same track on YouTube Music. The fingerprinted track is an* exact identification, so the top YT Music result is confirmed directly; the picked
+   * track's name is what the confirmation screen shows.
+   */
+  private suspend fun resolveOnYouTubeMusic(recognition: RecognitionResult): MatchResult.Matched? {
     val query = "${recognition.title} ${recognition.artist}".trim()
     if (query.isBlank()) return null
     val song = searchYouTubeMusic(query).orEmpty().firstOrNull() ?: return null
-    return MatchResult.Matched(song, recognition, reelTitle)
+    val label = listOfNotNull(recognition.title, recognition.artist).joinToString(" · ").trim()
+    return MatchResult.Matched(song, recognition, label)
   }
 
   /**

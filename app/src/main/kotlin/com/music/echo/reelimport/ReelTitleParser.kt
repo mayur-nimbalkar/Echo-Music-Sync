@@ -147,6 +147,59 @@ object ReelTitleParser {
     return candidates.distinct()
   }
 
+  /**
+   * Instagram handles: a single token with no spaces that carries handle punctuation
+   * (dots, underscores) or digits. Used only to reject uploader names — a plain
+   * lower-case word is ambiguous and therefore kept, since it may be a song title.
+   */
+  private val HANDLE_LIKE = Regex("^[A-Za-z0-9._]{1,39}$")
+
+  /** Handle-shaped token inside a longer caption line, e.g. `user_1234` or `some.creator`. */
+  private val HANDLE_TOKEN = Regex("^[A-Za-z0-9._]{5,39}$")
+
+  /**
+   * Best song-name hint mined from reel metadata, or "" when nothing usable exists.
+   *
+   * This is what prefills the manual-search box when identification fails, so it must be a
+   * song name — never the uploader's handle (`handle on Instagram: "caption"`), Instagram
+   * boilerplate or extractor garbage. Strong markers win over caption lines, every
+   * candidate is validated with [isPlausibleTrackTitle], and handle-shaped values are
+   * dropped even when they pass that check.
+   */
+  fun songNameHint(rawTitle: String?, caption: String? = null): String {
+    val (strong, weak) = rankedQueryCandidates(rawTitle, caption)
+    for (candidate in strong + weak) {
+      val value = candidate.removePrefix("@").replace(Regex("\\s+"), " ").trim()
+      if (value.isBlank() || !isPlausibleTrackTitle(value)) continue
+      // A leftover "… on Instagram" wrapper means the wrapper never parsed cleanly —
+      // that text is boilerplate, not a song name.
+      if (value.contains("instagram", ignoreCase = true)) continue
+      if (mentionsHandle(value)) continue
+      return value
+    }
+    return ""
+  }
+
+  /** True when [value] looks like an Instagram username rather than a song name. */
+  fun looksLikeHandle(value: String): Boolean {
+    val trimmed = value.trim().removePrefix("@")
+    if (trimmed.isEmpty() || !HANDLE_LIKE.matches(trimmed)) return false
+    return trimmed.any { it.isDigit() || it == '.' || it == '_' }
+  }
+
+  /**
+   * True when [value] is a handle itself or is a caption sentence built around one
+   * ("posted by user_1234"). Short track fragments such as `Mr.` or `24K Magic` are
+   * deliberately not treated as handles — dropping real song names is worse than
+   * passing one through to the search box, which the user can edit.
+   */
+  fun mentionsHandle(value: String): Boolean {
+    if (looksLikeHandle(value)) return true
+    val tokens = value.split(' ').filter { it.isNotBlank() }
+    if (tokens.size < 3) return false
+    return tokens.any { HANDLE_TOKEN.matches(it) && looksLikeHandle(it) }
+  }
+
   /** Extracts the first URL from arbitrary share text, or null when none exists. */
   fun extractUrl(text: String?): String? {
     if (text.isNullOrBlank()) return null
