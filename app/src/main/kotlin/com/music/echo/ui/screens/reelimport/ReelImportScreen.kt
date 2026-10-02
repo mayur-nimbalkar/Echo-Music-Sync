@@ -189,6 +189,7 @@ fun ReelImportScreen(
           FailedContent(
             reason = state.reason,
             onSearchManually = { viewModel.startManualSearch() },
+            onOpenSettings = { navController.navigate("settings/content") },
             onClose = {
               viewModel.reset()
               navController.navigateUp()
@@ -933,6 +934,7 @@ private fun FinishedContent(
 private fun FailedContent(
   reason: ReelImportStage,
   onSearchManually: () -> Unit,
+  onOpenSettings: () -> Unit,
   onClose: () -> Unit,
 ) {
   Column(
@@ -945,12 +947,14 @@ private fun FailedContent(
       modifier = Modifier.size(64.dp),
       tint = MaterialTheme.colorScheme.onSurfaceVariant,
     )
+    val needsLogin = reason == ReelImportStage.NEEDS_LOGIN
     Text(
       text =
         when (reason) {
           ReelImportStage.NOT_A_REEL -> stringResource(R.string.reel_import_not_reel)
           ReelImportStage.NO_MATCH -> stringResource(R.string.reel_import_failed)
           ReelImportStage.YTDLP_ERROR -> stringResource(R.string.reel_import_error_ytdlp)
+          ReelImportStage.NEEDS_LOGIN -> stringResource(R.string.reel_import_failed)
           else -> stringResource(R.string.reel_import_failed)
         },
       style = MaterialTheme.typography.titleMedium,
@@ -958,11 +962,21 @@ private fun FailedContent(
       textAlign = TextAlign.Center,
     )
     Text(
-      text = stringResource(R.string.reel_import_failed_hint),
+      text =
+        if (needsLogin) {
+          stringResource(R.string.reel_import_needs_login)
+        } else {
+          stringResource(R.string.reel_import_failed_hint)
+        },
       style = MaterialTheme.typography.bodyMedium,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       textAlign = TextAlign.Center,
     )
+    if (needsLogin) {
+      Button(onClick = onOpenSettings) {
+        Text(stringResource(R.string.reel_import_open_settings))
+      }
+    }
     Button(onClick = onSearchManually) {
       Text(stringResource(R.string.reel_import_search_manually))
     }

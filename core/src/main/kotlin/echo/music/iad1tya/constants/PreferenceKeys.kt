@@ -76,6 +76,9 @@ val ContentLanguageKey = stringPreferencesKey("contentLanguage")
 val ContentCountryKey = stringPreferencesKey("contentCountry")
 val SuggestionRegionKey = stringPreferencesKey("suggestionRegion")
 val EnableKugouKey = booleanPreferencesKey("enableKugou")
+
+/** Instagram `sessionid` cookie for reel-import metadata fetches (personal use only). */
+val InstagramSessionIdKey = stringPreferencesKey("instagramSessionId")
 val FetchFasterLyricsKey = booleanPreferencesKey("fetchFasterLyrics")
 
 val EnableLrcLibKey = booleanPreferencesKey("enableLrclib")

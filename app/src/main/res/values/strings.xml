@@ -208,6 +208,15 @@
     <string name="reel_import_failed">Couldn\'t find that song.</string>
     <string name="reel_import_failed_hint">Check your connection and try sharing the reel again — or search for the song yourself.</string>
     <string name="reel_import_search_manually">Search manually</string>
+    <string name="reel_import_needs_login">Could not identify this reel. Adding your Instagram session in Settings → Content usually fixes this.</string>
+    <string name="reel_import_open_settings">Open settings</string>
+
+    <string name="setting_instagram_session">Instagram session</string>
+    <string name="setting_instagram_session_desc_set">Session saved — reel identification uses your logged-in access.</string>
+    <string name="setting_instagram_session_desc_unset">Add your Instagram sessionid cookie so reel identification can read official audio metadata.</string>
+    <string name="setting_instagram_session_hint">Paste the sessionid value from your Instagram cookies</string>
+    <string name="setting_instagram_session_ok">Instagram session works</string>
+    <string name="setting_instagram_session_fail">Instagram did not accept this session — check the value and try again</string>
     <string name="reel_import_close">Close</string>
     <string name="reel_import_searching">Searching “%s”…</string>
     <string name="reel_import_search_hint">Song title or artist</string>

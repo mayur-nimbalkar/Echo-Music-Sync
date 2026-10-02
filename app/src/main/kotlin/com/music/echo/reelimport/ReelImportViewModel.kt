@@ -166,6 +166,8 @@ constructor(
         ReelMatcher.MatchResult.NoMatch ->
           // Nothing matched — show the manual search picker instead of a dead end.
           _uiState.value = ReelImportUiState.PickCandidate(emptyList(), "")
+        is ReelMatcher.MatchResult.NeedsLogin ->
+          _uiState.value = ReelImportUiState.Failed(ReelImportStage.NEEDS_LOGIN)
         is ReelMatcher.MatchResult.Error ->
           _uiState.value =
             ReelImportUiState.Failed(
@@ -280,12 +282,12 @@ constructor(
   }
 
   /** Jumps straight into manual search from a failed import — never a dead end. */
-  fun startManualSearch() {
+  fun startManualSearch(hint: String? = null) {
     matchJob?.cancel()
     searchJob?.cancel()
     currentRunUrl = null
     ReelImportState.clear()
-    _uiState.value = ReelImportUiState.PickCandidate(emptyList(), "")
+    _uiState.value = ReelImportUiState.PickCandidate(emptyList(), hint?.takeIf { it.isNotBlank() } ?: "")
   }
 
   fun setDefaultPlaylist(id: String) {
