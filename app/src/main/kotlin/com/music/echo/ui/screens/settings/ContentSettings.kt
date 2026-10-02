@@ -902,7 +902,7 @@ fun ContentSettings(
               withContext(Dispatchers.Main) {
                 Toast.makeText(
                   context,
-                  getString(
+                  context.getString(
                     if (ok) R.string.setting_instagram_session_ok
                     else R.string.setting_instagram_session_fail
                   ),
