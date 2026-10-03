@@ -212,6 +212,32 @@ class ReelTitleParserTest {
   }
 
   @Test
+  fun `official queries drop instagram original-sound placeholder`() {
+    // yt-dlp reports the creator's original audio as the track field for most reels;
+    // searching it produced the wrong "garbage" matches.
+    assertTrue(ReelTitleParser.officialQueryCandidates("some.creator_123 \u2022 Original audio", null, null).isEmpty())
+    assertTrue(ReelTitleParser.officialQueryCandidates(null, "Original sound", null).isEmpty())
+    assertTrue(ReelTitleParser.officialQueryCandidates("Original Audio - some.creator", null, null).isEmpty())
+  }
+
+  @Test
+  fun `official queries drop extractor garbage and instagram wrappers`() {
+    assertTrue(ReelTitleParser.officialQueryCandidates("{\"a\":1}", "application/json", null).isEmpty())
+    assertTrue(ReelTitleParser.officialQueryCandidates("Mmk1ZjVib3JjenV3", null, null).isEmpty())
+    assertTrue(ReelTitleParser.officialQueryCandidates(null, "Some User on Instagram", null).isEmpty())
+  }
+
+  @Test
+  fun `official queries keep real track and artist`() {
+    assertEquals(
+      listOf("Some Track Some Artist", "Some Track", "Some Artist"),
+      ReelTitleParser.officialQueryCandidates("Some Track", "Some Artist", null),
+    )
+    // An artist name with digits is legitimate and must survive the filter.
+    assertEquals(listOf("Blink-182"), ReelTitleParser.officialQueryCandidates(null, "Blink-182", null))
+  }
+
+  @Test
   fun `official attribution found in attributed-to phrasing`() {
     val html = "<html>noise\nAudio attributed to Artist One, Artist Two\nmore noise</html>"
     val attribution = ReelTitleParser.extractOfficialAttribution(html)
