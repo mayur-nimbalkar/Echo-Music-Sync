@@ -144,7 +144,26 @@ object ReelTitleParser {
     if (trackQ.isNotBlank()) candidates.add(trackQ)
     if (artistQ.isNotBlank()) candidates.add(artistQ)
     if (albumQ.isNotBlank() && albumQ != trackQ) candidates.add(albumQ)
-    return candidates.distinct()
+    return candidates.map { it.trim() }.filter { isUsableOfficialQuery(it) }.distinct()
+  }
+
+  /**
+   * Instagram's placeholder for user-uploaded audio, which yt-dlp reports as the `track`
+   * field for most reels. It names the creator's clip, not a song — searching it produced
+   * the "garbage" matches. Such values must never become a query.
+   */
+  private val ORIGINAL_AUDIO = Regex("original\\s+(audio|sound)", RegexOption.IGNORE_CASE)
+
+  /** True when an official-metadata value is a real song/artist worth searching. */
+  private fun isUsableOfficialQuery(value: String): Boolean {
+    if (value.isBlank()) return false
+    // Extractor garbage (JSON blobs, hashes, share tokens) is never a song.
+    if (!isPlausibleTrackTitle(value)) return false
+    // "Original audio"/"Original sound" is Instagram's own placeholder, not a track.
+    if (ORIGINAL_AUDIO.containsMatchIn(value)) return false
+    // A leftover "… on Instagram" wrapper is boilerplate, not a song name.
+    if (value.contains("instagram", ignoreCase = true)) return false
+    return true
   }
 
   /**
