@@ -95,3 +95,7 @@ Introduced for Instagram Reel imports, reusing established patterns rather than 
 - **Confirmation card** uses the app's translucent card language: `RoundedCornerShape(24.dp)` artwork with generous whitespace, bold `titleLarge` prompt, `primary`-colored matched title, and `onSurfaceVariant` supporting text.
 - **Playlist chooser** reuses `ListDialog` + `PlaylistListItem` + `listItemShape` (identical to AddToPlaylistDialog), with a custom segmented-style `Row` + `Switch` header for the "add future reels without asking" default-playlist option.
 - **Success state** is a primary-filled `CircleShape` badge with `check`, mirroring Nothing-OS minimal monochrome feedback rather than decorative animation.
+
+## Ambient Mode Canvas
+
+Ambient Mode may layer muted Canvas video artwork inside the existing album-art square. Keep the original square size, rounded clipping, and interaction surface unchanged; Canvas is a non-interactive visual layer above the normal album art and follows playback state. The existing glow background remains separate underneath the screen.
