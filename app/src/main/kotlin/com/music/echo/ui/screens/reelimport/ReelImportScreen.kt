@@ -62,9 +62,12 @@ import androidx.navigation.NavController
 import coil3.compose.AsyncImage
 import com.music.innertube.models.SongItem
 import com.music.shazamkit.models.RecognitionResult
+import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.ListThumbnailSize
 import echo.music.iad1tya.db.entities.Playlist
+import echo.music.iad1tya.extensions.toMediaItem
+import echo.music.iad1tya.playback.queues.ListQueue
 import echo.music.iad1tya.reelimport.ReelImportStage
 import echo.music.iad1tya.reelimport.ReelImportUiState
 import echo.music.iad1tya.reelimport.ReelImportViewModel
@@ -515,22 +518,30 @@ private fun ConfirmationContent(
         modifier = Modifier.size(180.dp).clip(RoundedCornerShape(24.dp)).align(Alignment.Center),
       )
     }
-    // Where the match came from: the audio itself, or Instagram's official audio tag.
-    Surface(
-      color = MaterialTheme.colorScheme.secondaryContainer,
-      contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
-      shape = RoundedCornerShape(50),
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-      Text(
-        text =
-          if (recognition != null) {
-            stringResource(R.string.reel_import_source_fingerprint)
-          } else {
-            stringResource(R.string.reel_import_source_official)
-          },
-        style = MaterialTheme.typography.labelMedium,
-        modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
-      )
+      // Where the match came from: the audio itself, or Instagram's official audio tag.
+      Surface(
+        color = MaterialTheme.colorScheme.secondaryContainer,
+        contentColor = MaterialTheme.colorScheme.onSecondaryContainer,
+        shape = RoundedCornerShape(50),
+      ) {
+        Text(
+          text =
+            if (recognition != null) {
+              stringResource(R.string.reel_import_source_fingerprint)
+            } else {
+              stringResource(R.string.reel_import_source_official)
+            },
+          style = MaterialTheme.typography.labelMedium,
+          modifier = Modifier.padding(horizontal = 12.dp, vertical = 5.dp),
+        )
+      }
+      // Preview the song before confirming — the source badge tells the user whether
+      // the name came from Shazam or from Instagram's metadata.
+      SongPreviewButton(song)
     }
 
     Column(
@@ -557,6 +568,16 @@ private fun ConfirmationContent(
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
+      song.album?.name?.takeIf { it.isNotBlank() }?.let { album ->
+        // The album/film tells apart songs that share a title (the metadata ambiguity).
+        Text(
+          text = album,
+          style = MaterialTheme.typography.bodySmall,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+      }
       if (reelTitle.isNotBlank()) {
         Text(
           text = stringResource(R.string.reel_import_confirmed_from_title, reelTitle),
@@ -729,18 +750,57 @@ private fun SongCandidateRow(song: SongItem, onPick: () -> Unit) {
         overflow = TextOverflow.Ellipsis,
       )
       Text(
-        text = song.artists.joinToString { it.name },
+        // Album/film included so same-titled songs stay distinguishable.
+        text =
+          listOfNotNull(
+              song.artists.joinToString { it.name }.takeIf { it.isNotBlank() },
+              song.album?.name?.takeIf { it.isNotBlank() },
+            )
+            .joinToString(" · "),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         maxLines = 1,
         overflow = TextOverflow.Ellipsis,
       )
     }
+    SongPreviewButton(song)
     Icon(
       painter = painterResource(R.drawable.playlist_add),
       contentDescription = null,
       tint = MaterialTheme.colorScheme.primary,
       modifier = Modifier.size(20.dp),
+    )
+  }
+}
+
+/**
+ * Play/pause preview of one candidate through the app's player, so the user can actually
+ * hear a song before confirming it. This matters most for metadata matches, where two
+ * different songs can share a title and only the audio tells them apart.
+ */
+@Composable
+private fun SongPreviewButton(song: SongItem) {
+  val playerConnection = LocalPlayerConnection.current ?: return
+  val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
+  val isPlaying by playerConnection.isPlaying.collectAsState()
+  val isCurrent = mediaMetadata?.id == song.id
+  val playing = isCurrent && isPlaying
+  IconButton(
+    onClick = {
+      if (isCurrent) {
+        playerConnection.togglePlayPause()
+      } else {
+        // A single-item queue: the preview never spills into unrelated songs.
+        playerConnection.playQueue(ListQueue(items = listOf(song.toMediaItem())))
+      }
+    },
+    modifier = Modifier.size(40.dp),
+  ) {
+    Icon(
+      painter = painterResource(if (playing) R.drawable.pause else R.drawable.play),
+      contentDescription = stringResource(if (playing) R.string.pause else R.string.play),
+      tint = MaterialTheme.colorScheme.primary,
+      modifier = Modifier.size(22.dp),
     )
   }
 }
@@ -952,9 +1012,7 @@ private fun FailedContent(
       text =
         when (reason) {
           ReelImportStage.NOT_A_REEL -> stringResource(R.string.reel_import_not_reel)
-          ReelImportStage.NO_MATCH -> stringResource(R.string.reel_import_failed)
           ReelImportStage.YTDLP_ERROR -> stringResource(R.string.reel_import_error_ytdlp)
-          ReelImportStage.NEEDS_LOGIN -> stringResource(R.string.reel_import_failed)
           else -> stringResource(R.string.reel_import_failed)
         },
       style = MaterialTheme.typography.titleMedium,

@@ -203,7 +203,6 @@
     <string name="reel_import_matching">Matching on YouTube Music…</string>
     <string name="reel_import_confirm_prompt">Is this the song from your reel?</string>
     <string name="reel_import_confirmed_from_title">From reel title: %s</string>
-    <string name="reel_import_listen_again">Listen again</string>
     <string name="reel_import_original_audio">Original audio of the reel</string>
     <string name="reel_import_failed">Couldn\'t find that song.</string>
     <string name="reel_import_failed_hint">Check your connection and try sharing the reel again — or search for the song yourself.</string>

@@ -6,7 +6,6 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /** Pipeline stages surfaced in the import UI. */
 enum class ReelImportStage {
-  IDLE,
   FETCHING_METADATA,
   EXTRACTING,
   LISTENING,
@@ -19,7 +18,6 @@ enum class ReelImportStage {
   NEEDS_LOGIN,
   YTDLP_ERROR,
   NOT_A_REEL,
-  NO_MATCH,
 }
 
 /**
@@ -31,8 +29,6 @@ object ReelImportState {
 
   data class PendingImport(
     val reelUrl: String,
-    val reelTitle: String = "",
-    val reelThumbnailUrl: String? = null,
     val stage: ReelImportStage = ReelImportStage.FETCHING_METADATA,
     /** Query currently being searched on YouTube Music, when in [ReelImportStage.MATCHING]. */
     val searchQuery: String? = null,
@@ -45,14 +41,8 @@ object ReelImportState {
     _current.value = _current.value?.copy(stage = stage)
   }
 
-  fun begin(url: String, title: String = "", thumbnailUrl: String? = null) {
-    _current.value =
-      PendingImport(
-        reelUrl = url,
-        reelTitle = title,
-        reelThumbnailUrl = thumbnailUrl,
-        stage = ReelImportStage.FETCHING_METADATA,
-      )
+  fun begin(url: String) {
+    _current.value = PendingImport(reelUrl = url)
   }
 
   /**
