@@ -82,7 +82,11 @@ fun CreatePlaylistDialog(
             isLocal = isLocal,
           )
 
-        database.query { insert(playlistEntity) }
+        // Insert on this IO coroutine and only then hand the id back. The previous
+        // fire-and-forget `database.query {}` returned immediately, so a caller that
+        // looked the new playlist up (the Reel import flow) sometimes found nothing and
+        // failed the import, forcing the user to search again.
+        database.insert(playlistEntity)
 
         withContext(Dispatchers.Main) { onPlaylistCreated?.invoke(playlistEntity.id) }
       }

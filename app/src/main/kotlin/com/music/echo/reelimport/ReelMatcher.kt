@@ -247,6 +247,19 @@ object ReelMatcher {
     val album: String? = null,
   )
 
+  /**
+   * Official audio metadata for a reel: the YouTube Music queries to try, plus the raw
+   * track/artist/album the queries were built from. The raw fields are kept so the
+   * candidates a query returns can be ranked by how well they match the reel's own
+   * metadata — metadata matches are not acoustically verified.
+   */
+  private data class OfficialMetadata(
+    val queries: List<String>,
+    val track: String? = null,
+    val artist: String? = null,
+    val album: String? = null,
+  )
+
   /** One-time native binary setup. Call from Application startup. */
   fun init(context: Context) {
     applySession(context.dataStore[InstagramSessionIdKey])
@@ -275,11 +288,11 @@ object ReelMatcher {
       val info = fetchReelInfo(reelUrl) ?: return@withContext MatchResult.Error("Reel could not be fetched")
 
       var searchFailed = false
-      var officialQueries: List<String>? = null
-      // The official-metadata queries cost network calls (app API + embed page), so they
-      // are resolved lazily and only once, on the first stage that needs them.
-      suspend fun official(): List<String> =
-        officialQueries ?: collectOfficialQueries(reelUrl, info).also { officialQueries = it }
+      var officialMetadata: OfficialMetadata? = null
+      // The official-metadata lookup costs network calls (app API + embed page), so it
+      // is resolved lazily and only once, on the first stage that needs it.
+      suspend fun official(): OfficialMetadata =
+        officialMetadata ?: collectOfficialMetadata(reelUrl, info).also { officialMetadata = it }
 
       // Stage 1 — fingerprint the reel's actual audio and identify it with Shazam. This
       // needs no Instagram session and is an exact match, so it decides first: the
@@ -312,13 +325,19 @@ object ReelMatcher {
       // Stage 2 — official audio metadata, searched on YouTube Music. Fast and
       // authoritative when present (licensed audio); needs a session for the app endpoint.
       if (!searchFailed) {
-        val queries = official()
-        if (queries.isNotEmpty()) {
+        val metadata = official()
+        if (metadata.queries.isNotEmpty()) {
           ReelImportState.report(ReelImportStage.MATCHING)
-          val hit = searchQueries(queries.take(MAX_METADATA_QUERIES), reelUrl) { searchFailed = true }
+          val hit =
+            searchQueries(metadata.queries.take(MAX_METADATA_QUERIES), reelUrl) { searchFailed = true }
           if (hit != null) {
             Timber.tag("ReelMatcher").i("Official query \"%s\" produced candidates", hit.second)
-            return@withContext MatchResult.TitleFallback(hit.first, hit.second)
+            // Metadata candidates are not fingerprinted, so identical titles from
+            // different films collide (e.g. "Bulleya" from two soundtracks). Rank them
+            // by the reel's own album/artist so the right one comes first; the user
+            // still confirms, so this only orders the picker.
+            val ranked = rankByMetadata(hit.first, metadata.album, metadata.artist, metadata.track)
+            return@withContext MatchResult.TitleFallback(ranked, hit.second)
           }
         }
       }
@@ -338,7 +357,7 @@ object ReelMatcher {
       // have: official attribution first, then the caption, and never the uploader
       // handle (the picker prefills its search box from this).
       val hint =
-        officialQueries?.firstOrNull()?.takeIf { it.isNotBlank() }
+        officialMetadata?.queries?.firstOrNull()?.takeIf { it.isNotBlank() }
           ?: ReelTitleParser.songNameHint(info.title, info.caption)
       if (sessionCookie() == null && !searchFailed && hint.isBlank()) {
         // Nothing at all to work with and no session: the metadata path is the only
@@ -380,21 +399,60 @@ object ReelMatcher {
    * (only when yt-dlp has nothing) Instagram's app media-info endpoint and finally the
    * embed page's attribution line. Never falls back to creator captions.
    */
-  private suspend fun collectOfficialQueries(reelUrl: String, info: ReelInfo): List<String> {
-    val ytDlpOfficial = ReelTitleParser.officialQueryCandidates(info.track, info.artist, info.album)
-    if (ytDlpOfficial.isNotEmpty()) return ytDlpOfficial
+  private suspend fun collectOfficialMetadata(reelUrl: String, info: ReelInfo): OfficialMetadata {
+    val ytDlpQueries = ReelTitleParser.officialQueryCandidates(info.track, info.artist, info.album)
+    if (ytDlpQueries.isNotEmpty()) {
+      return OfficialMetadata(ytDlpQueries, info.track, info.artist, info.album)
+    }
 
     ReelImportState.report(ReelImportStage.FETCHING_METADATA)
     val apiTriple = fetchOfficialMetadataApi(reelUrl)
-    val apiQueries =
-      apiTriple?.let { (song, artist, album) ->
-        ReelTitleParser.officialQueryCandidates(song, artist, album)
-      }.orEmpty()
-    if (apiQueries.isNotEmpty()) return apiQueries
+    if (apiTriple != null) {
+      val (song, artist, album) = apiTriple
+      val queries = ReelTitleParser.officialQueryCandidates(song, artist, album)
+      if (queries.isNotEmpty()) return OfficialMetadata(queries, song, artist, album)
+    }
 
-    return fetchOfficialAttribution(reelUrl)?.let { attribution ->
-      listOf(attribution, "$attribution artist").filter { it.isNotBlank() }
-    }.orEmpty()
+    val attribution = fetchOfficialAttribution(reelUrl)
+    return OfficialMetadata(
+      queries = attribution?.let { listOf(it, "$it artist") }.orEmpty(),
+      artist = attribution,
+    )
+  }
+
+  /**
+   * Orders metadata-derived candidates so the ones matching the reel's own audio
+   * metadata come first. Metadata matches are not acoustically verified, so two
+   * different songs can share a title ("Bulleya" from two films); the album is the
+   * strongest discriminator, then the artist, then an exact title match. The sort is
+   * stable, so YouTube Music's own relevance order survives for ties.
+   */
+  private fun rankByMetadata(
+    songs: List<SongItem>,
+    album: String?,
+    artist: String?,
+    track: String?,
+  ): List<SongItem> {
+    fun key(value: String?): String = value.orEmpty().lowercase().filter { it.isLetterOrDigit() }
+    val albumKey = key(album)
+    val artistKey = key(artist)
+    val trackKey = key(track)
+    if (albumKey.isBlank() && artistKey.isBlank()) return songs
+    return songs.sortedByDescending { song ->
+      var score = 0
+      val songAlbum = key(song.album?.name)
+      if (
+        albumKey.isNotBlank() &&
+          songAlbum.isNotBlank() &&
+          (songAlbum.contains(albumKey) || albumKey.contains(songAlbum))
+      ) {
+        score += 3
+      }
+      val songArtist = key(song.artists.joinToString(" ") { it.name })
+      if (artistKey.isNotBlank() && songArtist.contains(artistKey)) score += 2
+      if (trackKey.isNotBlank() && key(song.title) == trackKey) score += 1
+      score
+    }
   }
 
   /** Manual search used by the UI so a failed match never dead-ends the flow. */

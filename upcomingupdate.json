@@ -1,9 +1,12 @@
 {
   "features": [
     "Reel Import — Share an Instagram Reel to Echo Music: it identifies the song and asks you to confirm the match, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap.",
-    "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap."
+    "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap.",
+    "Reel Import song preview: play the identified song — or any candidate in the picker — before you confirm, so you can hear it first instead of trusting the name alone."
   ],
   "bug_fixes": [
+    "Reel Import now tells apart songs that share a title but are different tracks (for example one “Bulleya” from one film and another “Bulleya” from a different film): matches that come from metadata rather than the audio fingerprint are now ordered so the one matching the reel's own album/artist comes first, and the album/film is shown on every result so you can pick the right one — and preview it before confirming.",
+    "Fixed an intermittent failure where, right after creating a new playlist from the Reel import flow, the import reported “Couldn't find that song.” and the song had to be searched again: the new playlist is now saved before the song is added to it.",
     "Reel Import now identifies songs with Shazam even without an Instagram session: the reel's audio was being fingerprinted as interleaved stereo instead of the mono 16 kHz the signature needs, which shifted the spectrogram so Shazam could never match — every reel then fell through to weak metadata and produced wrong “garbage” results. The audio excerpt is now downmixed to mono before fingerprinting.",
     "Audio fingerprinting now runs first, before any metadata: Instagram's anonymous metadata is usually the creator's “Original audio” name, which used to be searched and returned as a confident wrong match while the real Shazam identification was never attempted. Fingerprinting decides the result first, and metadata/caption searches are only fallbacks.",
     "Reel Import no longer searches Instagram's “Original audio”/“Original sound” placeholder (or extractor garbage) as if it were a song, so those values can no longer surface as bogus candidates.",

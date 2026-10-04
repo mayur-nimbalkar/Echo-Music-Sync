@@ -151,9 +151,7 @@ constructor(
       when (val result = ReelMatcher.match(context, url)) {
         is ReelMatcher.MatchResult.Matched -> {
           pendingRecognition = result.recognition
-          ReelImportState.update(url) {
-            it.copy(reelTitle = result.reelTitle, stage = ReelImportStage.AWAITING_CONFIRM)
-          }
+          ReelImportState.update(url) { it.copy(stage = ReelImportStage.AWAITING_CONFIRM) }
           _uiState.value =
             ReelImportUiState.AwaitingConfirmation(
               song = result.song,
