@@ -95,9 +95,6 @@ constructor(
   /** URL of the run whose pipeline reports should update the UI; filters stale reports. */
   private var currentRunUrl: String? = null
 
-  /** Song-name hint carried from a failed run into manual search. */
-  private var pendingHint: String? = null
-
   init {
     viewModelScope.launch {
       defaultPlaylistId.value = context.dataStore.data.first()[ReelImportDefaultPlaylistIdKey].orEmpty()
@@ -141,7 +138,6 @@ constructor(
     matchJob?.cancel()
     searchJob?.cancel()
     pendingRecognition = null
-    pendingHint = null
     currentRunUrl = url
     ReelImportState.begin(url)
     _uiState.value = ReelImportUiState.Working(ReelImportStage.FETCHING_METADATA)
@@ -165,12 +161,6 @@ constructor(
           _uiState.value = ReelImportUiState.PickCandidate(result.songs, result.reelTitle)
         ReelMatcher.MatchResult.NotAReel ->
           _uiState.value = ReelImportUiState.Failed(ReelImportStage.NOT_A_REEL)
-        is ReelMatcher.MatchResult.NeedsLogin -> {
-          // Keep the mined song hint so the failure screen's manual-search escape hatch
-          // can prefill it instead of dropping the user on an empty search box.
-          pendingHint = result.reelTitle
-          _uiState.value = ReelImportUiState.Failed(ReelImportStage.NEEDS_LOGIN)
-        }
         is ReelMatcher.MatchResult.Error ->
           _uiState.value =
             ReelImportUiState.Failed(
@@ -285,17 +275,16 @@ constructor(
   }
 
   /** Jumps straight into manual search from a failed import — never a dead end. */
-  fun startManualSearch(hint: String? = null) {
+  fun startManualSearch() {
     matchJob?.cancel()
     searchJob?.cancel()
     currentRunUrl = null
-    pendingHint = null
     ReelImportState.clear()
-    _uiState.value = ReelImportUiState.PickCandidate(emptyList(), hint?.takeIf { it.isNotBlank() } ?: "")
+    _uiState.value = ReelImportUiState.PickCandidate(emptyList(), "")
   }
 
-  /** Manual-search escape hatch on the failure screen, prefilled with the mined hint. */
-  fun searchManuallyFromFailure() = startManualSearch(pendingHint)
+  /** Manual-search escape hatch on the failure screen. */
+  fun searchManuallyFromFailure() = startManualSearch()
 
   fun setDefaultPlaylist(id: String) {
     defaultPlaylistId.value = id
@@ -374,7 +363,6 @@ constructor(
 
   fun reset() {
     pendingRecognition = null
-    pendingHint = null
     lastAddedPlaylistId = null
     lastAddedPlaylistName = null
     currentRunUrl = null

@@ -41,11 +41,13 @@ import timber.log.Timber
 
 @OptIn(ExperimentalCoroutinesApi::class)
 class PlayerConnection(
-  val context: Context,
+  context: Context,
   binder: MusicBinder,
   val database: MusicDatabase,
   val scope: CoroutineScope,
 ) : Player.Listener {
+  val context: Context = context.applicationContext
+
   private companion object {
     private const val TAG = "PlayerConnection"
     private const val PLAYER_INIT_TIMEOUT_MS = 5000L
@@ -180,6 +182,14 @@ class PlayerConnection(
         }
       }
 
+      scope.launch {
+        service.currentMediaMetadata.collect { newMeta ->
+          if (newMeta != null) {
+            mediaMetadata.value = newMeta
+          }
+        }
+      }
+
       if (attachedPlayer == null && service.isPlayerReady.value) {
         updateAttachedPlayer(player)
       }
@@ -270,6 +280,31 @@ class PlayerConnection(
     } catch (e: Exception) {
       Timber.tag(TAG).e(e, "Error in addToQueue")
       throw e
+    }
+  }
+
+  fun clearQueue(): MusicService.ClearedQueueState? {
+    if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
+      Timber.tag("PlayerConnection").d("clearQueue blocked - Listen Together guest")
+      return null
+    }
+    return try {
+      service.clearQueue()
+    } catch (e: Exception) {
+      Timber.tag(TAG).e(e, "Error in clearQueue")
+      null
+    }
+  }
+
+  fun restoreQueue(state: MusicService.ClearedQueueState) {
+    if (!allowInternalSync && shouldBlockPlaybackChanges?.invoke() == true) {
+      Timber.tag("PlayerConnection").d("restoreQueue blocked - Listen Together guest")
+      return
+    }
+    try {
+      service.restoreQueue(state)
+    } catch (e: Exception) {
+      Timber.tag(TAG).e(e, "Error in restoreQueue")
     }
   }
 
@@ -414,6 +449,10 @@ class PlayerConnection(
   override fun onPlaybackStateChanged(state: Int) {
     playbackState.value = state
     error.value = player.playerError
+    if (mediaMetadata.value == null) {
+      mediaMetadata.value = player.currentMetadata
+    }
+    updateCanSkipPreviousAndNext()
   }
 
   override fun onPlayWhenReadyChanged(
@@ -423,11 +462,32 @@ class PlayerConnection(
     playWhenReady.value = newPlayWhenReady
   }
 
+  override fun onPositionDiscontinuity(
+    oldPosition: Player.PositionInfo,
+    newPosition: Player.PositionInfo,
+    reason: Int,
+  ) {
+    val meta = player.currentMetadata
+    if (meta != null) {
+      mediaMetadata.value = meta
+    }
+    currentMediaItemIndex.value = player.currentMediaItemIndex
+    currentWindowIndex.value = player.getCurrentQueueIndex()
+    updateCanSkipPreviousAndNext()
+  }
+
+  override fun onMediaMetadataChanged(mediaMetadata: androidx.media3.common.MediaMetadata) {
+    val meta = player.currentMetadata
+    if (meta != null) {
+      this.mediaMetadata.value = meta
+    }
+  }
+
   override fun onMediaItemTransition(
     mediaItem: MediaItem?,
     reason: Int,
   ) {
-    mediaMetadata.value = mediaItem?.metadata
+    mediaMetadata.value = mediaItem?.metadata ?: player.currentMetadata
     currentMediaItemIndex.value = player.currentMediaItemIndex
     currentWindowIndex.value = player.getCurrentQueueIndex()
     updateCanSkipPreviousAndNext()
@@ -437,7 +497,7 @@ class PlayerConnection(
     timeline: Timeline,
     reason: Int,
   ) {
-    mediaMetadata.value = player.currentMediaItem?.metadata
+    mediaMetadata.value = player.currentMediaItem?.metadata ?: player.currentMetadata
     queueWindows.value = player.getQueueWindows()
     queueTitle.value = service.queueTitle
     currentMediaItemIndex.value = player.currentMediaItemIndex

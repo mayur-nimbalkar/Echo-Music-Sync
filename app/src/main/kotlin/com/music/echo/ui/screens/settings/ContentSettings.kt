@@ -3,11 +3,8 @@ package echo.music.iad1tya.ui.screens.settings
 import android.content.Intent
 import android.os.Build
 import android.provider.Settings
-import android.widget.Toast
 import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -20,8 +17,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Block
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.BasicAlertDialog
 import androidx.compose.material3.Button
@@ -49,11 +47,8 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,18 +67,17 @@ import echo.music.iad1tya.constants.ContentCountryKey
 import echo.music.iad1tya.constants.ContentLanguageKey
 import echo.music.iad1tya.constants.CountryCodeToName
 import echo.music.iad1tya.constants.EnableBetterLyricsKey
+import echo.music.iad1tya.constants.EnableCronetKey
 import echo.music.iad1tya.constants.EnableKugouKey
 import echo.music.iad1tya.constants.EnableLrcLibKey
 import echo.music.iad1tya.constants.EnablePaxsenixKey
 import echo.music.iad1tya.constants.EnableSimpMusicKey
 import echo.music.iad1tya.constants.EnableYouLyPlusKey
-import echo.music.iad1tya.constants.EnableCronetKey
-import echo.music.iad1tya.constants.ForceOpusKey
 import echo.music.iad1tya.constants.FetchFasterLyricsKey
+import echo.music.iad1tya.constants.ForceOpusKey
 import echo.music.iad1tya.constants.HideExplicitKey
 import echo.music.iad1tya.constants.HideVideoSongsKey
 import echo.music.iad1tya.constants.HideYoutubeShortsKey
-import echo.music.iad1tya.constants.InstagramSessionIdKey
 import echo.music.iad1tya.constants.IpVersionKey
 import echo.music.iad1tya.constants.LanguageCodeToName
 import echo.music.iad1tya.constants.LyricsProviderOrderKey
@@ -122,18 +116,13 @@ import echo.music.iad1tya.lyrics.LyricsProviderRegistry
 import echo.music.iad1tya.ui.component.DraggableLyricsProviderItem
 import echo.music.iad1tya.ui.component.DraggableLyricsProviderList
 import echo.music.iad1tya.ui.component.EnumDialog
-import echo.music.iad1tya.ui.component.TextFieldDialog
 import echo.music.iad1tya.ui.component.IconButton
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
 import echo.music.iad1tya.ui.component.Material3SettingsItem
 import echo.music.iad1tya.ui.component.PlaybackLogsDialog
-import echo.music.iad1tya.reelimport.ReelMatcher
 import echo.music.iad1tya.ui.screens.search.suggestions.SuggestionRegionSheet
 import echo.music.iad1tya.ui.utils.backToMain
 import echo.music.iad1tya.utils.PlaybackLogManager
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import echo.music.iad1tya.utils.rememberEnumPreference
 import echo.music.iad1tya.utils.rememberPreference
 import java.net.Proxy
@@ -149,7 +138,6 @@ fun ContentSettings(
   val scrollState = androidx.compose.foundation.rememberScrollState()
 
   val context = LocalContext.current
-  val scope = rememberCoroutineScope()
 
   val (appLanguage, onAppLanguageChange) =
     rememberPreference(key = AppLanguageKey, defaultValue = SYSTEM_DEFAULT)
@@ -185,8 +173,7 @@ fun ContentSettings(
     rememberPreference(key = ContentCountryKey, defaultValue = "system")
   val (suggestionRegion, onSuggestionRegionChange) =
     rememberPreference(key = SuggestionRegionKey, defaultValue = "system")
-  val (forceOpus, onForceOpusChange) =
-    rememberPreference(key = ForceOpusKey, defaultValue = true)
+  val (forceOpus, onForceOpusChange) = rememberPreference(key = ForceOpusKey, defaultValue = true)
   val (enableCronet, onEnableCronetChange) =
     rememberPreference(key = EnableCronetKey, defaultValue = true)
   val (hideExplicit, onHideExplicitChange) =
@@ -197,11 +184,6 @@ fun ContentSettings(
   val (hideYoutubeShorts, onHideYoutubeShortsChange) =
     rememberPreference(key = HideYoutubeShortsKey, defaultValue = false)
 
-  // Instagram session for reel import (personal-use cookie, stored on-device only).
-  val (instagramSession, onInstagramSessionChange) =
-    rememberPreference(key = InstagramSessionIdKey, defaultValue = "")
-  var showInstagramSessionDialog by rememberSaveable { mutableStateOf(false) }
-  var instagramSessionDraft by rememberSaveable { mutableStateOf("") }
   val (sponsorBlockEnabled, onSponsorBlockEnabledChange) =
     rememberPreference(key = SponsorBlockEnabledKey, defaultValue = false)
   val (showArtistDescription, onShowArtistDescriptionChange) =
@@ -669,6 +651,21 @@ fun ContentSettings(
 
     Material3SettingsGroup(
       scrollState = scrollState,
+      title = "Privacy",
+      items =
+        listOf(
+          Material3SettingsItem(
+            isHighlighted = false,
+            title = { Text("Blocked Artists") },
+            description = { Text("Manage hidden artists") },
+            customIcon = { Icon(Icons.Default.Block, null) },
+            onClick = { navController.navigate("blocked_artists") }
+          )
+        )
+    )
+
+    Material3SettingsGroup(
+      scrollState = scrollState,
       title = stringResource(R.string.general),
       items =
         listOf(
@@ -676,7 +673,11 @@ fun ContentSettings(
             isHighlighted = (highlightKey == "Force Opus Audio"),
             icon = painterResource(R.drawable.music_note),
             title = { Text("Force Opus Audio (itag 251)") },
-            description = { Text("Force WebM/Opus streaming. Halves data usage and buffers 2x faster, but may lower raw bitrate.") },
+            description = {
+              Text(
+                "Force WebM/Opus streaming. Halves data usage and buffers 2x faster, but may lower raw bitrate."
+              )
+            },
             trailingContent = {
               Switch(
                 checked = forceOpus,
@@ -684,9 +685,7 @@ fun ContentSettings(
                 thumbContent = {
                   Icon(
                     painter =
-                      painterResource(
-                        id = if (forceOpus) R.drawable.check else R.drawable.close
-                      ),
+                      painterResource(id = if (forceOpus) R.drawable.check else R.drawable.close),
                     contentDescription = null,
                     modifier = Modifier.size(SwitchDefaults.IconSize),
                   )
@@ -699,7 +698,9 @@ fun ContentSettings(
             isHighlighted = (highlightKey == "Enable HTTP/3 (Cronet)"),
             icon = painterResource(R.drawable.speed),
             title = { Text("Enable HTTP/3 (Cronet)") },
-            description = { Text("Use QUIC over UDP for zero-latency streaming (Restart required)") },
+            description = {
+              Text("Use QUIC over UDP for zero-latency streaming (Restart required)")
+            },
             trailingContent = {
               Switch(
                 checked = enableCronet,
@@ -844,78 +845,11 @@ fun ContentSettings(
               )
             },
             onClick = { onSponsorBlockEnabledChange(!sponsorBlockEnabled) }
-          ),
-          Material3SettingsItem(
-            isHighlighted = (highlightKey == stringResource(R.string.setting_instagram_session)),
-            icon = painterResource(R.drawable.lock),
-            title = { Text(stringResource(R.string.setting_instagram_session)) },
-            description = {
-              Text(
-                if (instagramSession.isNotBlank()) {
-                  stringResource(R.string.setting_instagram_session_desc_set)
-                } else {
-                  stringResource(R.string.setting_instagram_session_desc_unset)
-                }
-              )
-            },
-            trailingContent = {
-              Box(
-                modifier = Modifier.padding(end = 4.dp),
-                contentAlignment = Alignment.Center
-              ) {
-                Box(
-                  modifier =
-                    Modifier.size(10.dp).clip(CircleShape)
-                      .background(
-                        if (instagramSession.isNotBlank()) {
-                          MaterialTheme.colorScheme.primary
-                        } else {
-                          MaterialTheme.colorScheme.outlineVariant
-                        }
-                      )
-                )
-              }
-            },
-            onClick = {
-              instagramSessionDraft = instagramSession
-              showInstagramSessionDialog = true
-            }
           )
         )
     )
 
     Spacer(modifier = Modifier.height(16.dp))
-
-    if (showInstagramSessionDialog) {
-      TextFieldDialog(
-        icon = { Icon(painterResource(R.drawable.lock), null) },
-        title = { Text(stringResource(R.string.setting_instagram_session)) },
-        initialTextFieldValue = TextFieldValue(instagramSessionDraft),
-        placeholder = { Text(stringResource(R.string.setting_instagram_session_hint)) },
-        singleLine = true,
-        onDone = { value ->
-          onInstagramSessionChange(value.trim())
-          ReelMatcher.setSessionId(value.trim())
-          if (value.isNotBlank()) {
-            scope.launch(Dispatchers.IO) {
-              val ok = ReelMatcher.testSession()
-              withContext(Dispatchers.Main) {
-                Toast.makeText(
-                  context,
-                  context.getString(
-                    if (ok) R.string.setting_instagram_session_ok
-                    else R.string.setting_instagram_session_fail
-                  ),
-                  Toast.LENGTH_SHORT
-                )
-                  .show()
-              }
-            }
-          }
-        },
-        onDismiss = { showInstagramSessionDialog = false }
-      )
-    }
 
     Material3SettingsGroup(
       scrollState = scrollState,

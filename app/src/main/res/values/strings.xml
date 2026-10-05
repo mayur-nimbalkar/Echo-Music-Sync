@@ -207,21 +207,17 @@
     <string name="reel_import_failed">Couldn\'t find that song.</string>
     <string name="reel_import_failed_hint">Check your connection and try sharing the reel again — or search for the song yourself.</string>
     <string name="reel_import_search_manually">Search manually</string>
-    <string name="reel_import_needs_login">Could not identify this reel. Adding your Instagram session in Settings → Content usually fixes this.</string>
-    <string name="reel_import_open_settings">Open settings</string>
 
-    <string name="setting_instagram_session">Instagram session</string>
-    <string name="setting_instagram_session_desc_set">Session saved — reel identification uses your logged-in access.</string>
-    <string name="setting_instagram_session_desc_unset">Add your Instagram sessionid cookie so reel identification can read official audio metadata.</string>
-    <string name="setting_instagram_session_hint">Paste the sessionid value — or the whole cookie line (sessionid=…; ds_user_id=…)</string>
-    <string name="setting_instagram_session_ok">Instagram session works</string>
-    <string name="setting_instagram_session_fail">Instagram did not accept this session — check the value and try again</string>
     <string name="reel_import_close">Close</string>
     <string name="reel_import_searching">Searching “%s”…</string>
     <string name="reel_import_search_hint">Song title or artist</string>
     <string name="reel_import_search_action">Search</string>
     <string name="reel_import_search_manually_hint">Automatic identification found nothing — search for the song manually.</string>
     <string name="reel_import_related_title">More like this</string>
+    <string name="reel_import_related_subtitle">Songs similar to your import — pick one to add</string>
+    <string name="reel_import_add_related_title">Add this song?</string>
+    <string name="reel_import_add_related_confirm">Add to %s</string>
+    <string name="reel_import_preview_hint">Tap to preview</string>
     <string name="reel_import_error_ytdlp">Audio extraction failed. Try updating yt-dlp.</string>
     <string name="reel_import_not_reel">This link is not an Instagram Reel</string>
     <string name="reel_import_add_to_playlist">Add to playlist</string>
@@ -232,6 +228,7 @@
     <string name="reel_import_added">Added to %s</string>
     <string name="reel_import_no_playlists">No playlists yet. Create one to save this song.</string>
     <string name="reel_import_share_hint">Share an Instagram reel to Echo Music to import its song.</string>
+    <string name="reel_import_how_it_works">How it works</string>
     <string name="reel_import_step_share">Share</string>
     <string name="reel_import_step_identify">Identify</string>
     <string name="reel_import_step_save">Save</string>
@@ -354,8 +351,24 @@
     <string name="apple_music">Apple Music</string>
     <string name="squiggly">Squiggly</string>
     <string name="misc">Misc</string>
+    <string name="haptics">Haptics</string>
+    <string name="haptics_desc">Configure vibration and tactile feedback</string>
+
     <string name="enable_haptics">Enable haptics</string>
     <string name="enable_haptics_desc">Provide haptic feedback while scrolling, clicking, and interacting with the app</string>
+    <string name="haptics_intensity">Haptic intensity</string>
+    <string name="haptics_intensity_desc">Adjust vibration strength for haptic feedback</string>
+    <string name="haptic_intensity_light">Light (Soft)</string>
+    <string name="haptic_intensity_medium">Medium (Standard)</string>
+    <string name="haptic_intensity_strong">Strong (Pronounced)</string>
+    <string name="haptic_click_feedback">Touch &amp; click feedback</string>
+    <string name="haptic_click_feedback_desc">Vibrate on button taps, navigation tabs, and switches</string>
+    <string name="haptic_long_press_feedback">Long press feedback</string>
+    <string name="haptic_long_press_feedback_desc">Vibrate when long pressing items and opening context menus</string>
+    <string name="haptic_scroll_edge_feedback">Scroll boundary feedback</string>
+    <string name="haptic_scroll_edge_feedback_desc">Vibrate softly when reaching the top or bottom edge of a list</string>
+    <string name="haptic_slider_feedback">Seekbar &amp; slider feedback</string>
+    <string name="haptic_slider_feedback_desc">Provide tactile ticks when adjusting progress and volume sliders</string>
 
     <string name="activity_history">Listening Summary</string>
     <string name="total_listening_time">Total Listening Time</string>
@@ -637,6 +650,7 @@
     <string name="ai_provider_openai_help_desc">Configure AI settings for Visit platform.openai.com/api-keys</string>
     <string name="ai_provider_openrouter_help_desc">Configure AI settings for Visit openrouter.ai for free and paid models</string>
     <string name="ai_provider_perplexity_help_desc">Configure AI settings for Visit perplexity.ai/settings/api</string>
+    <string name="ai_provider_requesty_help_desc">Configure AI settings for Visit app.requesty.ai/api-keys</string>
     <string name="ai_provider_xai_help_desc">Configure AI settings for Visit console.x.ai</string>
     <string name="ai_setup_guide_desc">Configure AI settings for API Credentials</string>
     <string name="ai_target_language_desc">Configure AI settings for Target Language</string>

@@ -33,8 +33,8 @@ android {
     applicationId = "echo.music.iad1tya"
     minSdk = 26
     targetSdk = 36
-    versionCode = 175
-    versionName = "1.5.0.004"
+    versionCode = 176
+    versionName = "1.5.0.005"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
@@ -239,11 +239,13 @@ tasks.withType<org.jetbrains.kotlin.gradle.tasks.KotlinCompile>().configureEach 
 }
 
 dependencies {
+  implementation("nl.dionsegijn:konfetti-compose:2.0.4")
+
   implementation(project(":core"))
   implementation(project(":playback"))
 
   // Firebase - GMS flavor only (excluded from F-Droid / FOSS builds)
-  "gmsImplementation"(platform("com.google.firebase:firebase-bom:33.1.0"))
+  "gmsImplementation"(platform("com.google.firebase:firebase-bom:34.19.0"))
   "gmsImplementation"("com.google.firebase:firebase-analytics")
   "gmsImplementation"("com.google.firebase:firebase-crashlytics")
 
@@ -311,9 +313,6 @@ dependencies {
   ksp(libs.hilt.compiler)
   ksp("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.20")
   annotationProcessor("org.jetbrains.kotlin:kotlin-metadata-jvm:2.4.20")
-
-
-
 
   implementation(project(":innertube"))
   implementation("com.github.MetrolistGroup.innertubex:innertubex-android:v0.7.0")

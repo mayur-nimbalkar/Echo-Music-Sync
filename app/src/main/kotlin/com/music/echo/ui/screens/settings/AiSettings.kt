@@ -44,6 +44,7 @@ import echo.music.iad1tya.constants.OpenRouterBaseUrlKey
 import echo.music.iad1tya.constants.OpenRouterModelKey
 import echo.music.iad1tya.constants.TranslateLanguageKey
 import echo.music.iad1tya.constants.TranslateModeKey
+import echo.music.iad1tya.lyrics.LyricsTranslationHelper
 import echo.music.iad1tya.ui.component.EnumDialog
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
 import echo.music.iad1tya.ui.component.Material3SettingsItem
@@ -320,8 +321,22 @@ fun AiSettings(
       title = { Text(stringResource(R.string.ai_api_key)) },
       icon = { Icon(painterResource(R.drawable.key), null) },
       initialTextFieldValue = TextFieldValue(text = openRouterApiKey),
+      isInputValid = { true },
+      onReset =
+        if (openRouterApiKey.isNotEmpty()) {
+          {
+            openRouterApiKey = ""
+            LyricsTranslationHelper.cancelTranslation()
+            LyricsTranslationHelper.resetStatus()
+          }
+        } else null,
+      resetText = stringResource(R.string.remove),
       onDone = {
-        openRouterApiKey = it
+        openRouterApiKey = it.trim()
+        if (it.isBlank()) {
+          LyricsTranslationHelper.cancelTranslation()
+          LyricsTranslationHelper.resetStatus()
+        }
         showApiKeyDialog = false
       },
       onDismiss = { showApiKeyDialog = false }
@@ -333,8 +348,22 @@ fun AiSettings(
       title = { Text("DeepL ${stringResource(R.string.ai_api_key)}") },
       icon = { Icon(painterResource(R.drawable.key), null) },
       initialTextFieldValue = TextFieldValue(text = deeplApiKey),
+      isInputValid = { true },
+      onReset =
+        if (deeplApiKey.isNotEmpty()) {
+          {
+            deeplApiKey = ""
+            LyricsTranslationHelper.cancelTranslation()
+            LyricsTranslationHelper.resetStatus()
+          }
+        } else null,
+      resetText = stringResource(R.string.remove),
       onDone = {
-        deeplApiKey = it
+        deeplApiKey = it.trim()
+        if (it.isBlank()) {
+          LyricsTranslationHelper.cancelTranslation()
+          LyricsTranslationHelper.resetStatus()
+        }
         showDeeplApiKeyDialog = false
       },
       onDismiss = { showDeeplApiKeyDialog = false }
@@ -477,7 +506,25 @@ fun AiSettings(
                     else stringResource(R.string.not_set)
                   )
                 },
-                onClick = { showDeeplApiKeyDialog = true }
+                onClick = { showDeeplApiKeyDialog = true },
+                trailingContent =
+                  if (deeplApiKey.isNotEmpty()) {
+                    {
+                      IconButton(
+                        onClick = {
+                          deeplApiKey = ""
+                          LyricsTranslationHelper.cancelTranslation()
+                          LyricsTranslationHelper.resetStatus()
+                        }
+                      ) {
+                        Icon(
+                          painter = painterResource(R.drawable.close),
+                          contentDescription = stringResource(R.string.remove),
+                          modifier = Modifier.size(20.dp)
+                        )
+                      }
+                    }
+                  } else null
               )
             )
             add(
@@ -510,7 +557,25 @@ fun AiSettings(
                     else stringResource(R.string.not_set)
                   )
                 },
-                onClick = { showApiKeyDialog = true }
+                onClick = { showApiKeyDialog = true },
+                trailingContent =
+                  if (openRouterApiKey.isNotEmpty()) {
+                    {
+                      IconButton(
+                        onClick = {
+                          openRouterApiKey = ""
+                          LyricsTranslationHelper.cancelTranslation()
+                          LyricsTranslationHelper.resetStatus()
+                        }
+                      ) {
+                        Icon(
+                          painter = painterResource(R.drawable.close),
+                          contentDescription = stringResource(R.string.remove),
+                          modifier = Modifier.size(20.dp)
+                        )
+                      }
+                    }
+                  } else null
               )
             )
             if (aiProvider != "Custom") {

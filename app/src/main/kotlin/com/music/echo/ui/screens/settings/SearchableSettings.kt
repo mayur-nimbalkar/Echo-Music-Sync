@@ -154,6 +154,12 @@ fun getAllSearchableSettings(): List<SearchableSetting> {
       "settings/ai"
     ),
     SearchableSetting(
+      stringResource(R.string.ai_provider_requesty_help),
+      stringResource(R.string.ai_provider_requesty_help_desc),
+      "AI Lyrics Translation",
+      "settings/ai"
+    ),
+    SearchableSetting(
       stringResource(R.string.ai_provider_xai_help),
       stringResource(R.string.ai_provider_xai_help_desc),
       "AI Lyrics Translation",
@@ -1715,6 +1721,12 @@ fun getAllSearchableSettings(): List<SearchableSetting> {
       "settings/appearance"
     ),
     SearchableSetting(
+      stringResource(R.string.wavy_play_pause),
+      stringResource(R.string.wavy_play_pause_desc),
+      "Appearance",
+      "settings/appearance"
+    ),
+    SearchableSetting(
       stringResource(R.string.yt_sync),
       stringResource(R.string.yt_sync_desc),
       "Account",
@@ -1961,7 +1973,37 @@ fun getAllSearchableSettings(): List<SearchableSetting> {
       stringResource(R.string.enable_haptics),
       stringResource(R.string.enable_haptics_desc),
       "Appearance",
-      "settings/appearance"
+      "settings/appearance/haptics"
+    ),
+    SearchableSetting(
+      stringResource(R.string.haptics_intensity),
+      stringResource(R.string.haptics_intensity_desc),
+      "Appearance",
+      "settings/appearance/haptics"
+    ),
+    SearchableSetting(
+      stringResource(R.string.haptic_click_feedback),
+      stringResource(R.string.haptic_click_feedback_desc),
+      "Appearance",
+      "settings/appearance/haptics"
+    ),
+    SearchableSetting(
+      stringResource(R.string.haptic_long_press_feedback),
+      stringResource(R.string.haptic_long_press_feedback_desc),
+      "Appearance",
+      "settings/appearance/haptics"
+    ),
+    SearchableSetting(
+      stringResource(R.string.haptic_scroll_edge_feedback),
+      stringResource(R.string.haptic_scroll_edge_feedback_desc),
+      "Appearance",
+      "settings/appearance/haptics"
+    ),
+    SearchableSetting(
+      stringResource(R.string.haptic_slider_feedback),
+      stringResource(R.string.haptic_slider_feedback_desc),
+      "Appearance",
+      "settings/appearance/haptics"
     ),
     SearchableSetting(
       stringResource(R.string.listen_together_username),

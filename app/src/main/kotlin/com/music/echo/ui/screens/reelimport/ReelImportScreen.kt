@@ -100,6 +100,9 @@ fun ReelImportScreen(
   /** Song awaiting a playlist choice from the picker dialog. */
   var pendingSong by remember { mutableStateOf<SongItem?>(null) }
 
+  /** Related song awaiting explicit confirmation before it is added to the playlist. */
+  var pendingRelatedSong by remember { mutableStateOf<SongItem?>(null) }
+
   fun openPlaylistPicker(song: SongItem) {
     pendingSong = song
   }
@@ -180,7 +183,7 @@ fun ReelImportScreen(
             playlists = playlists,
             relatedSongs = relatedSongs,
             addedRelatedIds = addedRelatedIds,
-            onAddRelated = { viewModel.addRelatedToPlaylist(it) },
+            onAddRelated = { pendingRelatedSong = it },
             onStopDefault = { showStopDefaultDialog = true },
             onDone = {
               viewModel.reset()
@@ -192,7 +195,6 @@ fun ReelImportScreen(
           FailedContent(
             reason = state.reason,
             onSearchManually = { viewModel.searchManuallyFromFailure() },
-            onOpenSettings = { navController.navigate("settings/content") },
             onClose = {
               viewModel.reset()
               navController.navigateUp()
@@ -212,6 +214,18 @@ fun ReelImportScreen(
           viewModel.pickCandidate(song, playlistId)
         },
         onCreatePlaylist = { showCreatePlaylist = true },
+      )
+    }
+
+    pendingRelatedSong?.let { song ->
+      RelatedSongConfirmDialog(
+        song = song,
+        playlistName = (uiState as? ReelImportUiState.Finished)?.playlistName,
+        onDismiss = { pendingRelatedSong = null },
+        onConfirm = {
+          viewModel.addRelatedToPlaylist(song)
+          pendingRelatedSong = null
+        },
       )
     }
 
@@ -270,27 +284,7 @@ private fun IdleContent() {
     verticalArrangement = Arrangement.spacedBy(20.dp),
     modifier = Modifier.fillMaxWidth(),
   ) {
-    Box(
-      modifier =
-        Modifier.size(120.dp)
-          .clip(RoundedCornerShape(32.dp))
-          .background(
-            Brush.linearGradient(
-              listOf(
-                MaterialTheme.colorScheme.primaryContainer,
-                MaterialTheme.colorScheme.secondaryContainer,
-              )
-            )
-          ),
-      contentAlignment = Alignment.Center,
-    ) {
-      Icon(
-        painter = painterResource(R.drawable.graphic_eq),
-        contentDescription = null,
-        modifier = Modifier.size(56.dp),
-        tint = MaterialTheme.colorScheme.onPrimaryContainer,
-      )
-    }
+    EqualizerBadge()
     Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(6.dp)) {
       Text(
         text = stringResource(R.string.reel_import),
@@ -302,16 +296,35 @@ private fun IdleContent() {
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
+        modifier = Modifier.padding(horizontal = 16.dp),
       )
     }
-    Row(
-      horizontalArrangement = Arrangement.spacedBy(24.dp),
-      verticalAlignment = Alignment.CenterVertically,
-      modifier = Modifier.padding(top = 8.dp),
+    Surface(
+      color = MaterialTheme.colorScheme.surfaceContainerLow,
+      shape = RoundedCornerShape(22.dp),
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
     ) {
-      IdleStep(icon = R.drawable.share, label = stringResource(R.string.reel_import_step_share))
-      IdleStep(icon = R.drawable.graphic_eq, label = stringResource(R.string.reel_import_step_identify))
-      IdleStep(icon = R.drawable.playlist_add, label = stringResource(R.string.reel_import_step_save))
+      Column(
+        verticalArrangement = Arrangement.spacedBy(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(vertical = 20.dp),
+      ) {
+        Text(
+          text = stringResource(R.string.reel_import_how_it_works),
+          style = MaterialTheme.typography.labelLarge,
+          color = MaterialTheme.colorScheme.primary,
+          textAlign = TextAlign.Center,
+          modifier = Modifier.fillMaxWidth(),
+        )
+        Row(
+          horizontalArrangement = Arrangement.SpaceEvenly,
+          verticalAlignment = Alignment.CenterVertically,
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          IdleStep(icon = R.drawable.share, label = stringResource(R.string.reel_import_step_share))
+          IdleStep(icon = R.drawable.graphic_eq, label = stringResource(R.string.reel_import_step_identify))
+          IdleStep(icon = R.drawable.playlist_add, label = stringResource(R.string.reel_import_step_save))
+        }
+      }
     }
   }
 }
@@ -349,45 +362,65 @@ private fun WorkingContent(stage: ReelImportStage, searchQuery: String? = null) 
       else -> 0
     }
 
+  val headline =
+    when (stage) {
+      ReelImportStage.FETCHING_METADATA -> stringResource(R.string.reel_import_fetching_metadata)
+      ReelImportStage.EXTRACTING -> stringResource(R.string.reel_import_extracting_audio)
+      ReelImportStage.MATCHING -> stringResource(R.string.reel_import_matching)
+      else -> stringResource(R.string.reel_import_listening)
+    }
+
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(28.dp),
+    verticalArrangement = Arrangement.spacedBy(24.dp),
     modifier = Modifier.fillMaxWidth(),
   ) {
     EqualizerBadge()
-    Column(verticalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.fillMaxWidth()) {
-      WorkingStep(
-        label = stringResource(R.string.reel_import_step_reel),
-        state = if (stepIndex > 0) StepState.Done else StepState.Current,
-      )
-      WorkingStep(
-        label = stringResource(R.string.reel_import_step_audio),
-        state =
-          when {
-            stepIndex > 1 -> StepState.Done
-            stepIndex == 1 -> StepState.Current
-            else -> StepState.Pending
-          },
-      )
-      WorkingStep(
-        label = stringResource(R.string.reel_import_step_listen),
-        state =
-          when {
-            stepIndex > 2 -> StepState.Done
-            stepIndex == 2 -> StepState.Current
-            else -> StepState.Pending
-          },
-      )
-      WorkingStep(
-        label =
-          if (stepIndex == 3 && !searchQuery.isNullOrBlank()) {
-            // Show the live query so a slow stage is never a blind spinner.
-            stringResource(R.string.reel_import_searching, searchQuery)
-          } else {
-            stringResource(R.string.reel_import_step_match)
-          },
-        state = if (stepIndex == 3) StepState.Current else StepState.Pending,
-      )
+    Text(
+      text = headline,
+      style = MaterialTheme.typography.titleMedium,
+      color = MaterialTheme.colorScheme.onSurface,
+      textAlign = TextAlign.Center,
+    )
+    Surface(
+      color = MaterialTheme.colorScheme.surfaceContainerLow,
+      shape = RoundedCornerShape(22.dp),
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
+    ) {
+      Column(verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 22.dp)) {
+        WorkingStep(
+          label = stringResource(R.string.reel_import_step_reel),
+          state = if (stepIndex > 0) StepState.Done else StepState.Current,
+        )
+        WorkingStep(
+          label = stringResource(R.string.reel_import_step_audio),
+          state =
+            when {
+              stepIndex > 1 -> StepState.Done
+              stepIndex == 1 -> StepState.Current
+              else -> StepState.Pending
+            },
+        )
+        WorkingStep(
+          label = stringResource(R.string.reel_import_step_listen),
+          state =
+            when {
+              stepIndex > 2 -> StepState.Done
+              stepIndex == 2 -> StepState.Current
+              else -> StepState.Pending
+            },
+        )
+        WorkingStep(
+          label =
+            if (stepIndex == 3 && !searchQuery.isNullOrBlank()) {
+              // Show the live query so a slow stage is never a blind spinner.
+              stringResource(R.string.reel_import_searching, searchQuery)
+            } else {
+              stringResource(R.string.reel_import_step_match)
+            },
+          state = if (stepIndex == 3) StepState.Current else StepState.Pending,
+        )
+      }
     }
   }
 }
@@ -905,17 +938,22 @@ private fun FinishedContent(
     horizontalAlignment = Alignment.CenterHorizontally,
     verticalArrangement = Arrangement.spacedBy(20.dp),
   ) {
-    Box(
-      modifier =
-        Modifier.size(96.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-      contentAlignment = Alignment.Center,
-    ) {
-      Icon(
-        painter = painterResource(R.drawable.check),
-        contentDescription = null,
-        tint = MaterialTheme.colorScheme.onPrimary,
-        modifier = Modifier.size(48.dp),
+    Box {
+      Box(
+        modifier =
+          Modifier.size(112.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary.copy(alpha = 0.16f)).align(Alignment.Center),
       )
+      Box(
+        modifier = Modifier.size(84.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary).align(Alignment.Center),
+        contentAlignment = Alignment.Center,
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.check),
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onPrimary,
+          modifier = Modifier.size(44.dp),
+        )
+      }
     }
     Text(
       text = stringResource(R.string.reel_import_added, playlistName.orEmpty()),
@@ -924,44 +962,67 @@ private fun FinishedContent(
       textAlign = TextAlign.Center,
     )
     if (relatedSongs.isNotEmpty()) {
-      Column(modifier = Modifier.fillMaxWidth()) {
-        Text(
-          text = stringResource(R.string.reel_import_related_title),
-          style = MaterialTheme.typography.titleMedium,
-          color = MaterialTheme.colorScheme.onSurface,
-          modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
-        )
-        LazyColumn(
-          modifier = Modifier.fillMaxWidth().height(280.dp),
-          verticalArrangement = Arrangement.spacedBy(8.dp),
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        Column(
+          modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+          verticalArrangement = Arrangement.spacedBy(2.dp),
         ) {
-          itemsIndexed(relatedSongs) { index, song ->
-            val added = song.id in addedRelatedIds
-            ListItem(
-              title = song.title,
-              subtitle = { Text(song.artists.joinToString { it.name }) },
-              thumbnailContent = {
-                AsyncImage(
-                  model = song.thumbnail,
-                  contentDescription = null,
-                  contentScale = ContentScale.Crop,
-                  modifier = Modifier.size(ListThumbnailSize).clip(RoundedCornerShape(8.dp)),
-                )
-              },
-              shape = listItemShape(index = index, count = relatedSongs.size),
-              trailingContent = {
-                if (added) {
-                  Icon(
-                    painter = painterResource(R.drawable.check),
-                    contentDescription = null,
-                    tint = MaterialTheme.colorScheme.primary,
+          Text(
+            text = stringResource(R.string.reel_import_related_title),
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onSurface,
+          )
+          Text(
+            text = stringResource(R.string.reel_import_related_subtitle),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+          )
+        }
+        Surface(
+          color = MaterialTheme.colorScheme.surfaceContainerLow,
+          shape = RoundedCornerShape(20.dp),
+          modifier = Modifier.fillMaxWidth(),
+        ) {
+          LazyColumn(
+            modifier = Modifier.fillMaxWidth().height(280.dp).padding(vertical = 6.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp),
+          ) {
+            itemsIndexed(relatedSongs) { index, song ->
+              val added = song.id in addedRelatedIds
+              ListItem(
+                title = song.title,
+                subtitle = {
+                  Text(
+                    song.artists.joinToString { it.name },
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
                   )
-                }
-              },
-              color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f),
-              modifier =
-                Modifier.clickable(enabled = !added) { onAddRelated(song) },
-            )
+                },
+                thumbnailContent = {
+                  AsyncImage(
+                    model = song.thumbnail,
+                    contentDescription = null,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(ListThumbnailSize).clip(RoundedCornerShape(8.dp)),
+                  )
+                },
+                shape = listItemShape(index = index, count = relatedSongs.size),
+                trailingContent = {
+                  Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Preview first: recommendations are guesses, so hearing it before
+                    // adding is part of deciding whether to confirm.
+                    SongPreviewButton(song)
+                    Icon(
+                      painter = painterResource(if (added) R.drawable.check else R.drawable.playlist_add),
+                      contentDescription = null,
+                      tint = MaterialTheme.colorScheme.primary,
+                      modifier = Modifier.size(20.dp),
+                    )
+                  }
+                },
+                modifier = Modifier.clickable(enabled = !added) { onAddRelated(song) },
+              )
+            }
           }
         }
       }
@@ -994,20 +1055,27 @@ private fun FinishedContent(
 private fun FailedContent(
   reason: ReelImportStage,
   onSearchManually: () -> Unit,
-  onOpenSettings: () -> Unit,
   onClose: () -> Unit,
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
+    verticalArrangement = Arrangement.spacedBy(18.dp),
+    modifier = Modifier.fillMaxWidth(),
   ) {
-    Icon(
-      painter = painterResource(R.drawable.error),
-      contentDescription = null,
-      modifier = Modifier.size(64.dp),
-      tint = MaterialTheme.colorScheme.onSurfaceVariant,
-    )
-    val needsLogin = reason == ReelImportStage.NEEDS_LOGIN
+    Box(
+      modifier =
+        Modifier.size(96.dp)
+          .clip(CircleShape)
+          .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+      contentAlignment = Alignment.Center,
+    ) {
+      Icon(
+        painter = painterResource(R.drawable.error),
+        contentDescription = null,
+        modifier = Modifier.size(44.dp),
+        tint = MaterialTheme.colorScheme.onSurfaceVariant,
+      )
+    }
     Text(
       text =
         when (reason) {
@@ -1019,27 +1087,95 @@ private fun FailedContent(
       color = MaterialTheme.colorScheme.onSurface,
       textAlign = TextAlign.Center,
     )
-    Text(
-      text =
-        if (needsLogin) {
-          stringResource(R.string.reel_import_needs_login)
-        } else {
-          stringResource(R.string.reel_import_failed_hint)
-        },
-      style = MaterialTheme.typography.bodyMedium,
-      color = MaterialTheme.colorScheme.onSurfaceVariant,
-      textAlign = TextAlign.Center,
-    )
-    if (needsLogin) {
-      Button(onClick = onOpenSettings) {
-        Text(stringResource(R.string.reel_import_open_settings))
-      }
+    Surface(
+      color = MaterialTheme.colorScheme.surfaceContainerLow,
+      shape = RoundedCornerShape(18.dp),
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+    ) {
+      Text(
+        text = stringResource(R.string.reel_import_failed_hint),
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = TextAlign.Center,
+        modifier = Modifier.fillMaxWidth().padding(16.dp),
+      )
     }
-    Button(onClick = onSearchManually) {
+    Button(
+      onClick = onSearchManually,
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(52.dp),
+    ) {
       Text(stringResource(R.string.reel_import_search_manually))
     }
     TextButton(onClick = onClose) {
       Text(stringResource(R.string.reel_import_close))
+    }
+  }
+}
+
+/**
+ * Confirmation shown before a recommended song is added to the playlist. Recommendations are
+ * guesses, so a single tap must never silently commit one — the user gets the artwork, a
+ * preview and an explicit "Add to <playlist>" choice.
+ */
+@Composable
+private fun RelatedSongConfirmDialog(
+  song: SongItem,
+  playlistName: String?,
+  onDismiss: () -> Unit,
+  onConfirm: () -> Unit,
+) {
+  DefaultDialog(
+    title = { Text(stringResource(R.string.reel_import_add_related_title)) },
+    onDismiss = onDismiss,
+    buttons = {
+      TextButton(onClick = onConfirm) {
+        Text(
+          text =
+            playlistName?.takeIf { it.isNotBlank() }?.let {
+              stringResource(R.string.reel_import_add_related_confirm, it)
+            } ?: stringResource(R.string.reel_import_add_to_playlist)
+        )
+      }
+      TextButton(onClick = onDismiss) { Text(stringResource(android.R.string.cancel)) }
+    },
+  ) {
+    Row(
+      verticalAlignment = Alignment.CenterVertically,
+      horizontalArrangement = Arrangement.spacedBy(14.dp),
+      modifier = Modifier.fillMaxWidth(),
+    ) {
+      AsyncImage(
+        model = song.thumbnail,
+        contentDescription = null,
+        contentScale = ContentScale.Crop,
+        modifier = Modifier.size(64.dp).clip(RoundedCornerShape(14.dp)),
+      )
+      Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Text(
+          text = song.title,
+          style = MaterialTheme.typography.titleMedium,
+          color = MaterialTheme.colorScheme.onSurface,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        Text(
+          text = song.artists.joinToString { it.name },
+          style = MaterialTheme.typography.bodyMedium,
+          color = MaterialTheme.colorScheme.onSurfaceVariant,
+          maxLines = 1,
+          overflow = TextOverflow.Ellipsis,
+        )
+        song.album?.name?.takeIf { it.isNotBlank() }?.let { album ->
+          Text(
+            text = album,
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+          )
+        }
+      }
+      SongPreviewButton(song)
     }
   }
 }

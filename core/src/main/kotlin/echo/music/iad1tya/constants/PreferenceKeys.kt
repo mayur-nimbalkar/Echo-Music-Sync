@@ -23,6 +23,23 @@ val AppIconTypeKey = stringPreferencesKey("app_icon_type")
 
 val EnableHighRefreshRateKey = booleanPreferencesKey("enableHighRefreshRate")
 val EnableHapticsKey = booleanPreferencesKey("enableHaptics")
+val HapticIntensityKey = stringPreferencesKey("haptic_intensity")
+val EnableClickHapticsKey = booleanPreferencesKey("enable_click_haptics")
+val EnableLongPressHapticsKey = booleanPreferencesKey("enable_long_press_haptics")
+val EnableScrollEdgeHapticsKey = booleanPreferencesKey("enable_scroll_edge_haptics")
+val EnableSliderHapticsKey = booleanPreferencesKey("enable_slider_haptics")
+
+enum class HapticIntensity(val label: String, val scaleFactor: Float) {
+  LIGHT("Light", 0.4f),
+  MEDIUM("Medium", 0.75f),
+  STRONG("Strong", 1.0f);
+
+  companion object {
+    fun fromName(name: String?): HapticIntensity =
+      entries.find { it.name.equals(name, ignoreCase = true) } ?: MEDIUM
+  }
+}
+
 val DynamicThemeKey = booleanPreferencesKey("dynamicTheme")
 val SelectedThemeColorKey = intPreferencesKey("selectedThemeColor")
 val DarkModeKey = stringPreferencesKey("darkMode")
@@ -49,6 +66,7 @@ val SlimNavBarKey = booleanPreferencesKey("slimNavBar")
 val GridItemsSizeKey = stringPreferencesKey("gridItemSize")
 val SliderStyleKey = stringPreferencesKey("sliderStyle")
 val SquigglySliderKey = booleanPreferencesKey("squigglySlider")
+val WavyPlayPauseKey = booleanPreferencesKey("wavyPlayPause")
 val SwipeToSongKey = booleanPreferencesKey("SwipeToSong")
 val SwipeToRemoveSongKey = booleanPreferencesKey("SwipeToRemoveSong")
 val UseNewPlayerDesignKey = booleanPreferencesKey("useNewPlayerDesign")
@@ -77,8 +95,6 @@ val ContentCountryKey = stringPreferencesKey("contentCountry")
 val SuggestionRegionKey = stringPreferencesKey("suggestionRegion")
 val EnableKugouKey = booleanPreferencesKey("enableKugou")
 
-/** Instagram `sessionid` cookie for reel-import metadata fetches (personal use only). */
-val InstagramSessionIdKey = stringPreferencesKey("instagramSessionId")
 val FetchFasterLyricsKey = booleanPreferencesKey("fetchFasterLyrics")
 
 val EnableLrcLibKey = booleanPreferencesKey("enableLrclib")
@@ -118,6 +134,7 @@ enum class DownloadQuality {
 }
 
 val DownloadOnWifiOnlyKey = booleanPreferencesKey("downloadOnWifiOnly")
+val DownloadWithMetadataKey = booleanPreferencesKey("downloadWithMetadata")
 
 val AudioOffload = booleanPreferencesKey("enableOffload")
 
@@ -223,6 +240,8 @@ val MixSortDescendingKey = booleanPreferencesKey("albumSortDescending")
 
 val LocalSongsMinDurationSecondsKey = intPreferencesKey("local_songs_min_duration_seconds")
 val LocalSongsExcludedFoldersKey = stringSetPreferencesKey("local_songs_excluded_folders")
+val LocalSongsIncludedFoldersKey = stringSetPreferencesKey("local_songs_included_folders")
+val LocalSongsFolderFilterModeKey = stringPreferencesKey("local_songs_folder_filter_mode")
 val LocalStorageDirsKey = stringSetPreferencesKey("local_storage_dirs")
 val DiscordTokenKey = stringPreferencesKey("discord_token")
 val DiscordRefreshTokenKey = stringPreferencesKey("discord_refresh_token")
@@ -779,7 +798,6 @@ val PreloadNextSongEnabledKey = booleanPreferencesKey("preload_next_song_enabled
 val PreloadNextSongLimitKey = intPreferencesKey("preload_next_song_limit")
 val PreloadLyricsEnabledKey = booleanPreferencesKey("preload_lyrics_enabled")
 
-
 val LiquidGlassGlobalEnabledKey = booleanPreferencesKey("liquidGlassGlobalEnabled")
 val LiquidGlassTextColorKey = intPreferencesKey("liquidGlassTextColor")
 val LiquidGlassSurfaceTintColorKey = intPreferencesKey("liquidGlassSurfaceTintColor")
@@ -803,23 +821,29 @@ val AmbientArtScaleKey = floatPreferencesKey("ambient_art_scale")
 val AmbientShowTitleKey = booleanPreferencesKey("ambient_show_title")
 val AmbientShowArtistKey = booleanPreferencesKey("ambient_show_artist")
 val AmbientShowLyricsKey = booleanPreferencesKey("ambient_show_lyrics")
+val AmbientShowArtKey = booleanPreferencesKey("ambient_show_art")
+val AmbientFullScreenArtKey = booleanPreferencesKey("ambient_full_screen_art")
 
 // Reel import (Instagram Reel → playlist)
 val ReelImportDefaultPlaylistIdKey = stringPreferencesKey("reelImportDefaultPlaylistId")
 
 
-enum class AppFont(val value: String) {
-    SYSTEM("system"),
-    GOOGLE_SANS("google_sans"),
-    SANS_FLEX("sans_flex"),
-    OUTFIT("outfit"),
-    PLUS_JAKARTA_SANS("plus_jakarta_sans"),
-    CUSTOM("custom");
+val AmbientSpacingKey = floatPreferencesKey("ambient_spacing")
 
-    companion object {
-        fun fromValue(value: String): AppFont = entries.find { it.value == value } ?: SYSTEM
-    }
+enum class AppFont(val value: String) {
+  SYSTEM("system"),
+  GOOGLE_SANS("google_sans"),
+  SANS_FLEX("sans_flex"),
+  OUTFIT("outfit"),
+  PLUS_JAKARTA_SANS("plus_jakarta_sans"),
+  CUSTOM("custom");
+
+  companion object {
+    fun fromValue(value: String): AppFont = entries.find { it.value == value } ?: SYSTEM
+  }
 }
 
 val SelectedFontKey = stringPreferencesKey("selected_app_font")
 val CustomFontPathKey = androidx.datastore.preferences.core.stringPreferencesKey("custom_font_path")
+val BlockedArtistsKey =
+  androidx.datastore.preferences.core.stringSetPreferencesKey("blockedArtists")
