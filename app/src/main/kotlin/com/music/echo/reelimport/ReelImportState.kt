@@ -14,8 +14,6 @@ enum class ReelImportStage {
   ADDING,
   DONE,
   FAILED,
-  /** Instagram rejected the request — expired session cookie, or a blocked network. */
-  NEEDS_LOGIN,
   YTDLP_ERROR,
   NOT_A_REEL,
 }

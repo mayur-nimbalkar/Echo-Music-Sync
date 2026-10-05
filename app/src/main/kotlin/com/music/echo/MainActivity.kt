@@ -1816,6 +1816,27 @@ class MainActivity : ComponentActivity() {
     intent.removeExtra(Intent.EXTRA_TEXT)
     val coroutineScope = lifecycle.coroutineScope
 
+    // Instagram reel share → reel import flow (fingerprint match → confirm → playlist).
+    val instagramHost = uri.host?.lowercase()
+    if (instagramHost != null &&
+        (instagramHost == "instagram.com" ||
+          instagramHost == "instagr.am" ||
+          instagramHost == "www.instagram.com" ||
+          instagramHost == "m.instagram.com" ||
+          instagramHost.endsWith(".instagram.com") ||
+          instagramHost.endsWith(".instagr.am"))
+    ) {
+      val encoded = URLEncoder.encode(uri.toString(), "UTF-8")
+      navController.navigate("reel_import?url=$encoded") {
+        launchSingleTop = true
+        // Replace an already-open reel import screen so the new link actually
+        // reaches it — with plain launchSingleTop the old instance keeps its
+        // arguments and the new share would be silently ignored.
+        popUpTo("reel_import?url={url}") { inclusive = true }
+      }
+      return
+    }
+
     val listenCode =
       uri.getQueryParameter("code")
         ?: uri.getQueryParameter("room")

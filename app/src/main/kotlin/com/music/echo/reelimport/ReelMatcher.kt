@@ -8,13 +8,10 @@ import com.yausername.ffmpeg.FFmpeg
 import com.yausername.youtubedl_android.YoutubeDL
 import com.yausername.youtubedl_android.YoutubeDLException
 import com.yausername.youtubedl_android.YoutubeDLRequest
-import echo.music.iad1tya.constants.InstagramSessionIdKey
 import echo.music.iad1tya.recognition.AudioResampler
 import echo.music.iad1tya.recognition.DecodedAudio
 import echo.music.iad1tya.recognition.VibraSignature
 import echo.music.iad1tya.utils.reportException
-import echo.music.iad1tya.utils.dataStore
-import echo.music.iad1tya.utils.get
 import java.io.File
 import java.nio.ByteBuffer
 import kotlinx.coroutines.CancellationException
@@ -29,7 +26,7 @@ import timber.log.Timber
  *
  * Pipeline (audio fingerprint first, metadata second — captions are never used):
  * 1. The reel's own audio is fingerprinted with the same [VibraSignature] used by Echo Find
- *    and identified through Shazam. This needs no Instagram session and is an exact match.
+ *    and identified through Shazam. This needs no account and is an exact match.
  * 2. Official track/artist/album metadata (yt-dlp `--dump-json`, Instagram's app media-info
  *    endpoint, the embed page's attribution line) is searched on YouTube Music as a fallback.
  * 3. As a last resort the creator's caption is mined for a song name and searched, but its
@@ -94,32 +91,6 @@ object ReelMatcher {
   /** Instagram's public web app id — accepted by the mobile media-info endpoint. */
   private const val IG_WEB_APP_ID = "936619743392459"
 
-  /**
-   * The user's own Instagram session (Settings → Content → Instagram session).
-   * When set, Instagram's app endpoints and the embed page treat requests as a logged-in
-   * app/browser instead of an anonymous datacenter crawler — the difference between
-   * working metadata and 403s. Stored only on-device.
-   *
-   * Accepts a bare `sessionid` value, or a whole cookie line such as
-   * `sessionid=…; ds_user_id=…; csrftoken=…` (parsed below).
-   */
-  @Volatile private var sessionId: String? = null
-  @Volatile private var dsUserId: String? = null
-
-  /** Live-updates the session cookie (called from Settings). */
-  fun setSessionId(value: String?) {
-    applySession(value)
-  }
-
-  /** The cookie header sent with every Instagram request, or null when signed out. */
-  private fun sessionCookie(): String? {
-    val sid = sessionId?.takeIf { it.isNotBlank() } ?: return null
-    return buildString {
-      append("sessionid=").append(sid)
-      dsUserId?.takeIf { it.isNotBlank() }?.let { append("; ds_user_id=").append(it) }
-    }
-  }
-
   /** One shared client for every Instagram call — building a client per request is pure waste. */
   private val httpClient: okhttp3.OkHttpClient by lazy {
     okhttp3.OkHttpClient.Builder()
@@ -127,59 +98,6 @@ object ReelMatcher {
       .readTimeout(ATTRIBUTION_TIMEOUT_SECONDS, java.util.concurrent.TimeUnit.SECONDS)
       .build()
   }
-
-  /** Parses either a bare sessionid or a cookie line into the session fields. */
-  private fun applySession(raw: String?) {
-    val text = raw?.trim().orEmpty()
-    if (text.isEmpty()) {
-      sessionId = null
-      dsUserId = null
-      return
-    }
-    if (text.contains("sessionid=")) {
-      // Whole cookie line: pull the interesting parts out.
-      sessionId = parseCookieValue(text, "sessionid")
-      dsUserId = parseCookieValue(text, "ds_user_id")
-    } else {
-      sessionId = text
-      dsUserId = null
-    }
-  }
-
-  private fun parseCookieValue(cookieLine: String, name: String): String? {
-    // Tolerate a pasted request header, e.g. "Cookie: sessionid=...; ds_user_id=...".
-    val body = if (cookieLine.trimStart().startsWith("cookie:", ignoreCase = true)) {
-      cookieLine.substringAfter(':')
-    } else {
-      cookieLine
-    }
-    val match = Regex("(?:^|[;\\s])$name=([^;\\s]+)").find(body) ?: return null
-    return match.groupValues[1].trim().ifBlank { null }
-  }
-
-  /**
-   * Probes a lightweight Instagram endpoint with the current session cookie to check
-   * whether it is still valid. Used by the Settings screen after saving a cookie.
-   */
-  suspend fun testSession(): Boolean =
-    withContext(Dispatchers.IO) {
-      runCatching {
-        withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
-          val request =
-            okhttp3.Request.Builder()
-              .url("https://i.instagram.com/api/v1/accounts/current/?__a=1&__d=1")
-              .header("User-Agent", IG_APP_USER_AGENT)
-              .header("x-ig-app-id", IG_WEB_APP_ID)
-              .header("Cookie", sessionCookie().orEmpty())
-              .build()
-          val response = httpClient.newCall(request).execute()
-          response.use { it.code != 401 && it.code != 403 }
-        }
-          ?: false
-      }
-        .onFailure { Timber.tag("ReelMatcher").d(it, "Session test failed") }
-        .getOrNull() ?: false
-    }
 
   /**
    * Instagram mobile app user agent for the media-info endpoint. The desktop web page
@@ -223,13 +141,6 @@ object ReelMatcher {
     /** The link is not a reel (or is private/deleted). */
     data object NotAReel : MatchResult()
 
-    /**
-     * Nothing matched and no Instagram session is configured — setup would likely
-     * have provided the official metadata that makes identification work. [reelTitle]
-     * carries the best mined hint for the manual-search prefill.
-     */
-    data class NeedsLogin(val reelTitle: String) : MatchResult()
-
     /** yt-dlp is unavailable (first-run binary update failed) or extraction failed. */
     data class Error(val message: String) : MatchResult()
   }
@@ -262,7 +173,6 @@ object ReelMatcher {
 
   /** One-time native binary setup. Call from Application startup. */
   fun init(context: Context) {
-    applySession(context.dataStore[InstagramSessionIdKey])
     try {
       YoutubeDL.init(context)
       FFmpeg.init(context)
@@ -295,7 +205,7 @@ object ReelMatcher {
         officialMetadata ?: collectOfficialMetadata(reelUrl, info).also { officialMetadata = it }
 
       // Stage 1 — fingerprint the reel's actual audio and identify it with Shazam. This
-      // needs no Instagram session and is an exact match, so it decides first: the
+      // needs no account and is an exact match, so it decides first: the
       // metadata Instagram exposes anonymously is often the creator's original-sound
       // name, which used to produce convincing but wrong candidates.
       ReelImportState.report(ReelImportStage.EXTRACTING)
@@ -323,7 +233,7 @@ object ReelMatcher {
       }
 
       // Stage 2 — official audio metadata, searched on YouTube Music. Fast and
-      // authoritative when present (licensed audio); needs a session for the app endpoint.
+      // authoritative when present (licensed audio).
       if (!searchFailed) {
         val metadata = official()
         if (metadata.queries.isNotEmpty()) {
@@ -359,15 +269,9 @@ object ReelMatcher {
       val hint =
         officialMetadata?.queries?.firstOrNull()?.takeIf { it.isNotBlank() }
           ?: ReelTitleParser.songNameHint(info.title, info.caption)
-      if (sessionCookie() == null && !searchFailed && hint.isBlank()) {
-        // Nothing at all to work with and no session: the metadata path is the only
-        // remaining option, so suggest setup on the failure screen. When a hint exists
-        // the user goes straight to a prefilled manual search instead of a login wall.
-        Timber.tag("ReelMatcher").i("No match and no Instagram session — suggesting setup")
-        MatchResult.NeedsLogin(hint)
-      } else {
-        MatchResult.TitleFallback(emptyList(), hint)
-      }
+      // Nothing identified automatically: always hand off to the picker, prefilled with the
+      // best song-name hint we have (never a dead-end login wall).
+      MatchResult.TitleFallback(emptyList(), hint)
     }
 
   /**
@@ -467,9 +371,6 @@ object ReelMatcher {
         request.addOption("--no-playlist")
         request.addOption("--socket-timeout", SOCKET_TIMEOUT_SECONDS)
         request.addOption("--retries", YTDLP_RETRIES)
-        // With the user's session cookie, Instagram serves yt-dlp as a logged-in
-        // client instead of walling it.
-        sessionCookie()?.let { request.addOption("--add-headers", "Cookie: $it") }
         val response = YoutubeDL.getInstance().execute(request)
         if (response.exitCode != 0 && response.out.isBlank()) return@runCatching null
         // Parse --dump-json output with org.json — Jackson is runtime-scoped in the library.
@@ -645,8 +546,6 @@ object ReelMatcher {
             okhttp3.Request.Builder()
               .url(reelUrl)
               .header("User-Agent", IG_BROWSER_USER_AGENT)
-          // A session cookie avoids the login wall that strips audio attribution.
-          sessionCookie()?.let { requestBuilder.header("Cookie", it) }
           val request = requestBuilder.build()
           httpClient
             .newCall(request)
@@ -687,9 +586,6 @@ object ReelMatcher {
             .url("https://i.instagram.com/api/v1/media/$mediaId/info/")
             .header("User-Agent", IG_APP_USER_AGENT)
             .header("x-ig-app-id", IG_WEB_APP_ID)
-        // The session cookie is what turns a datacenter-style 403 into app-grade access.
-        // The app API wants both sessionid and ds_user_id (the numeric account id).
-        sessionCookie()?.let { requestBuilder.header("Cookie", it) }
         val request = requestBuilder.build()
         httpClient
           .newCall(request)

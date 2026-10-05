@@ -1,10 +1,13 @@
 {
   "features": [
+    "Reel Import now asks before adding a suggested song: after your reel's song is added, the “More like this” recommendations open a confirmation card — with artwork, a preview and an explicit “Add to <playlist>” button — instead of being added the moment you tap them.",
+    "Reel Import got a refreshed look: an animated hero on the idle screen, a “How it works” card, a cleaner step-by-step progress card, and recommendation rows that show album/film and a preview button.",
     "Reel Import — Share an Instagram Reel to Echo Music: it identifies the song and asks you to confirm the match, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap.",
     "Reel Import suggestions: after adding a reel's song, songs from the same movie/album/artist are suggested so you can extend the vibe in one tap.",
     "Reel Import song preview: play the identified song — or any candidate in the picker — before you confirm, so you can hear it first instead of trusting the name alone."
   ],
   "bug_fixes": [
+    "Removed the Instagram session setting and all related code — it was never usable in practice (Instagram blocks datacenter/app access regardless) and only cluttered Settings → Content. Reel identification relies on audio fingerprinting and anonymous metadata.",
     "Reel Import now tells apart songs that share a title but are different tracks (for example one “Bulleya” from one film and another “Bulleya” from a different film): matches that come from metadata rather than the audio fingerprint are now ordered so the one matching the reel's own album/artist comes first, and the album/film is shown on every result so you can pick the right one — and preview it before confirming.",
     "Fixed an intermittent failure where, right after creating a new playlist from the Reel import flow, the import reported “Couldn't find that song.” and the song had to be searched again: the new playlist is now saved before the song is added to it.",
     "Reel Import now identifies songs with Shazam even without an Instagram session: the reel's audio was being fingerprinted as interleaved stereo instead of the mono 16 kHz the signature needs, which shifted the spectrogram so Shazam could never match — every reel then fell through to weak metadata and produced wrong “garbage” results. The audio excerpt is now downmixed to mono before fingerprinting.",
