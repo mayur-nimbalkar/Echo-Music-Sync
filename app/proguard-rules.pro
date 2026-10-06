@@ -36,6 +36,15 @@
 -keepnames class com.yausername.youtubedl_android.mapper.VideoThumbnail
 -keepnames class com.yausername.youtubedl_android.mapper.VideoSubtitle
 
+# Jackson's optional extension bindings reference JDK-only classes (java.beans / org.w3c.dom)
+# that do not exist on Android. Without these, R8 fails the minified release build with
+# "Missing class" errors (e.g. java.beans.ConstructorProperties, java.beans.Transient,
+# org.w3c.dom.bootstrap.DOMImplementationRegistry).
+-dontwarn com.fasterxml.jackson.**
+-dontwarn java.beans.ConstructorProperties
+-dontwarn java.beans.Transient
+-dontwarn org.w3c.dom.bootstrap.DOMImplementationRegistry
+
 # If your project uses WebView with JS, uncomment the following
 # and specify the fully qualified class name to the JavaScript interface
 # class:
