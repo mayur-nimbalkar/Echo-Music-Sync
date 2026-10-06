@@ -26,7 +26,9 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
  * @param version The latest version tag or display string.
  * @param changelog Pre-parsed structured changelog sections, if available.
  * @param description Raw release description or fallback Markdown text.
- * @param onDismiss Invoked when the user dismisses the dialog.
+ * @param onDismiss Invoked when the user dismisses the dialog (tap outside / back).
+ * @param onRemindLater Invoked when the user asks to be reminded in 24 hours; the caller
+ *   persists the snooze so the dialog stays away until then.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -34,7 +36,8 @@ fun UpdateAvailableDialog(
   version: String,
   changelog: List<ChangelogSection>,
   description: String?,
-  onDismiss: () -> Unit
+  onDismiss: () -> Unit,
+  onRemindLater: () -> Unit
 ) {
   val context = LocalContext.current
   val cardShape =
@@ -187,10 +190,10 @@ fun UpdateAvailableDialog(
           horizontalArrangement = Arrangement.End,
         ) {
           TextButton(
-            onClick = onDismiss,
+            onClick = onRemindLater,
             shape = actionShape,
           ) {
-            Text(text = "Next time")
+            Text(text = stringResource(R.string.update_remind_later))
           }
           Spacer(modifier = Modifier.width(8.dp))
           Button(
