@@ -67,14 +67,23 @@ jobs:
     # Both flavors are published for now, so the universal APK stays available as a
     # fallback: it bundles the yt-dlp/FFmpeg native payload for all four ABIs (~270 MB),
     # while arm64-v8a is the ABI every current Android phone uses and lands around 100 MB.
+    #
+    # Four variants are compiled in this job, and the Kotlin daemon accumulates garbage
+    # across compilations: at the checked-in 3g heap the release compile dies with
+    # "GC overhead limit exceeded". Give it more room (-P overrides gradle.properties) and
+    # start the second build type from a clean daemon.
     - name: Build Debug APKs (arm64 + universal)
       run: |
         chmod +x gradlew
-        ./gradlew assembleArm64FossDebug assembleUniversalFossDebug
+        ./gradlew assembleArm64FossDebug assembleUniversalFossDebug \
+          -Pkotlin.daemon.jvmargs=-Xmx6g
 
     - name: Build Stable APKs (arm64 + universal)
       run: |
-        ./gradlew assembleArm64GmsRelease assembleUniversalGmsRelease
+        ./gradlew --stop || true
+        pkill -f KotlinCompileDaemon || true
+        ./gradlew assembleArm64GmsRelease assembleUniversalGmsRelease \
+          -Pkotlin.daemon.jvmargs=-Xmx6g
 
     - name: Upload arm64 Debug APK
       uses: actions/upload-artifact@v7
