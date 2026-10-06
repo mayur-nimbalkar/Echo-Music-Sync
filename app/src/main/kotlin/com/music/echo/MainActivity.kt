@@ -174,7 +174,9 @@ import echo.music.iad1tya.echomusic.UpdateNotificationHelper
 import echo.music.iad1tya.echomusic.updater.checkForUpdate
 import echo.music.iad1tya.echomusic.updater.getAutoUpdateCheckSetting
 import echo.music.iad1tya.echomusic.updater.getUpdateNotificationsSetting
+import echo.music.iad1tya.echomusic.updater.isUpdateSnoozed
 import echo.music.iad1tya.echomusic.updater.saveUpdateAvailableState
+import echo.music.iad1tya.echomusic.updater.snoozeUpdate
 import echo.music.iad1tya.extensions.toEnum
 import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.playback.DownloadUtil
@@ -543,7 +545,9 @@ class MainActivity : ComponentActivity() {
             )
             saveUpdateAvailableState(context, isAvailable)
 
-            if (isAvailable) {
+            // Respect a 24h snooze: after the user taps "Remind me in 24 hrs" the dialog
+            // stays away for that version, so it can no longer pop up mid playlist add.
+            if (isAvailable && !isUpdateSnoozed(context, latestVersion)) {
               availableUpdateVersion = latestVersion
               availableUpdateChangelog = changelog
               availableUpdateDescription = description
@@ -721,7 +725,11 @@ class MainActivity : ComponentActivity() {
           version = availableUpdateVersion,
           changelog = availableUpdateChangelog,
           description = availableUpdateDescription,
-          onDismiss = { showUpdateDialog = false }
+          onDismiss = { showUpdateDialog = false },
+          onRemindLater = {
+            snoozeUpdate(context, availableUpdateVersion)
+            showUpdateDialog = false
+          }
         )
       } else {
         whatsNewInfo?.let { info ->

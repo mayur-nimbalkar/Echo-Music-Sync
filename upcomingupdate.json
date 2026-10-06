@@ -1,5 +1,7 @@
 {
   "features": [
+    "The update-available dialog now offers “Remind me in 24 hrs”: postpone it once and it stays away for a full day — and for that same version — so it can no longer pop up and interrupt you while you are adding songs to a playlist.",
+    "Reel Import got a roomier, easier-on-the-eyes layout: more breathing room, taller recommendation rows and a scrollable result screen, so the match screen, the “More like this” list and the manual-search screen no longer look cramped on a phone.",
     "Reel Import now asks before adding a suggested song: after your reel's song is added, the “More like this” recommendations open a confirmation card — with artwork, a preview and an explicit “Add to <playlist>” button — instead of being added the moment you tap them.",
     "Reel Import got a refreshed look: an animated hero on the idle screen, a “How it works” card, a cleaner step-by-step progress card, and recommendation rows that show album/film and a preview button.",
     "Reel Import — Share an Instagram Reel to Echo Music: it identifies the song and asks you to confirm the match, then adds it to a playlist you choose — with an optional default playlist so future reels are added in one tap.",
@@ -7,6 +9,7 @@
     "Reel Import song preview: play the identified song — or any candidate in the picker — before you confirm, so you can hear it first instead of trusting the name alone."
   ],
   "bug_fixes": [
+    "Fixed a case where a reel's song was not matched even though Shazam identified it perfectly: the import used to require the reel's metadata up front and bailed out with “Couldn't find that song.” if that lookup failed, never trying the audio fingerprint. The fingerprint (the reel's own sound) now always runs, and a metadata failure only affects the fallback searches.",
     "Removed the Instagram session setting and all related code — it was never usable in practice (Instagram blocks datacenter/app access regardless) and only cluttered Settings → Content. Reel identification relies on audio fingerprinting and anonymous metadata.",
     "Reel Import now tells apart songs that share a title but are different tracks (for example one “Bulleya” from one film and another “Bulleya” from a different film): matches that come from metadata rather than the audio fingerprint are now ordered so the one matching the reel's own album/artist comes first, and the album/film is shown on every result so you can pick the right one — and preview it before confirming.",
     "Fixed an intermittent failure where, right after creating a new playlist from the Reel import flow, the import reported “Couldn't find that song.” and the song had to be searched again: the new playlist is now saved before the song is added to it.",

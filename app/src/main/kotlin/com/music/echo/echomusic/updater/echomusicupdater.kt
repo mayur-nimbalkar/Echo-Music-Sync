@@ -579,6 +579,37 @@ fun saveUpdateAvailableState(context: Context, available: Boolean) {
   sharedPrefs.edit().putBoolean(KEY_UPDATE_AVAILABLE, available).apply()
 }
 
+const val KEY_UPDATE_SNOOZE_UNTIL = "update_snooze_until"
+const val KEY_UPDATE_SNOOZE_VERSION = "update_snooze_version"
+
+/**
+ * Postpones the update dialog for [hours] (default 24) for [version]. A newer version has a
+ * different version string, so it still shows immediately — only this one is muted. This
+ * keeps the dialog from popping back up and interrupting the app (e.g. mid playlist add).
+ */
+fun snoozeUpdate(context: Context, version: String, hours: Long = 24) {
+  context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    .edit()
+    .putLong(KEY_UPDATE_SNOOZE_UNTIL, System.currentTimeMillis() + hours * 60L * 60L * 1000L)
+    .putString(KEY_UPDATE_SNOOZE_VERSION, version)
+    .apply()
+}
+
+/** True while the dialog for [version] is snoozed — the user asked to be reminded later. */
+fun isUpdateSnoozed(context: Context, version: String): Boolean {
+  val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+  if (sharedPrefs.getString(KEY_UPDATE_SNOOZE_VERSION, "") != version) return false
+  return sharedPrefs.getLong(KEY_UPDATE_SNOOZE_UNTIL, 0L) > System.currentTimeMillis()
+}
+
+fun clearUpdateSnooze(context: Context) {
+  context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+    .edit()
+    .remove(KEY_UPDATE_SNOOZE_UNTIL)
+    .remove(KEY_UPDATE_SNOOZE_VERSION)
+    .apply()
+}
+
 fun getAutoUpdateCheckSetting(context: Context): Boolean {
   val sharedPrefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
   return sharedPrefs.getBoolean(KEY_AUTO_UPDATE_CHECK, true)

@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Signed APK
+    name: Build Debug and Stable APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -27,30 +27,16 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Decode Keystore
-      if: ${{ env.KEYSTORE_BASE64 != '' }}
-      env:
-        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-      run: |
-        echo "$KEYSTORE_BASE64" | base64 -d > keystore.jks
-
-    - name: Build Release APK
-      if: ${{ env.KEYSTORE_BASE64 != '' }}
+    - name: Prepare signing keystores
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
       run: |
-        chmod +x gradlew
-        ./gradlew assembleUniversalGmsRelease
-
-    - name: Build Debug APK (fork PR fallback without signing)
-      if: ${{ env.KEYSTORE_BASE64 == '' }}
-      env:
-        KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
-      run: |
         mkdir -p "$HOME/.android"
+
+        # Debug key: signs the debug build type.
         keytool -genkeypair \
           -keystore "$HOME/.android/debug.keystore" \
           -storepass android \
@@ -59,11 +45,57 @@ jobs:
           -dname "CN=Android Debug,O=Android,C=US" \
           -keyalg RSA \
           -validity 10000
+
+        if [ -n "$KEYSTORE_BASE64" ]; then
+          # Industry standard: the release keystore lives in a repository secret
+          # and is only decoded on the runner. Never commit it.
+          printf '%s' "$KEYSTORE_BASE64" | base64 -d > keystore.jks
+          echo "Release keystore decoded from KEYSTORE_BASE64."
+        else
+          # Fallback so a signed release APK can still be produced when no
+          # keystore secret is configured. This key is regenerated on every run,
+          # so consecutive releases cannot update each other in place until the
+          # secrets below are added.
+          echo "::warning::KEYSTORE_BASE64 is not set - signing the release APK with a per-run generated keystore. Add KEYSTORE_BASE64, KEY_ALIAS, KEY_PASSWORD and STORE_PASSWORD secrets for a stable signing identity."
+          keytool -genkeypair \
+            -keystore keystore.jks \
+            -storepass android \
+            -alias echorelease \
+            -keypass android \
+            -dname "CN=Echo Music Add-on,O=mayur-nimbalkar,C=IN" \
+            -keyalg RSA \
+            -validity 10000
+          KEY_ALIAS=echorelease
+          KEY_PASSWORD=android
+          STORE_PASSWORD=android
+        fi
+
+        # Consumed by the release signing config in app/build.gradle.kts.
+        {
+          echo "KEY_ALIAS=$KEY_ALIAS"
+          echo "KEY_PASSWORD=$KEY_PASSWORD"
+          echo "STORE_PASSWORD=$STORE_PASSWORD"
+        } >> "$GITHUB_ENV"
+
+    - name: Build Debug APK
+      run: |
         chmod +x gradlew
         ./gradlew assembleUniversalFossDebug
 
-    - name: Upload Universal APK
+    - name: Build Stable (Release) APK
+      run: |
+        ./gradlew assembleUniversalGmsRelease
+
+    - name: Upload Debug APK
       uses: actions/upload-artifact@v7
       with:
-        name: Echo-Music-Universal-APK
-        path: app/build/outputs/apk/**/*.apk
+        name: Echo-Music-Debug-APK
+        path: app/build/outputs/apk/**/*debug*.apk
+        if-no-files-found: error
+
+    - name: Upload Stable APK
+      uses: actions/upload-artifact@v7
+      with:
+        name: Echo-Music-Stable-APK
+        path: app/build/outputs/apk/**/*release*.apk
+        if-no-files-found: error

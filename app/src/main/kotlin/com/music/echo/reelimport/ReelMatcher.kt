@@ -195,14 +195,21 @@ object ReelMatcher {
     withContext(Dispatchers.IO) {
       if (!isSupportedReelUrl(reelUrl)) return@withContext MatchResult.NotAReel
 
-      val info = fetchReelInfo(reelUrl) ?: return@withContext MatchResult.Error("Reel could not be fetched")
+      // Reel metadata is fetched once, up front, so the "reading the reel" step is shown
+      // before fingerprinting. Its failure is NOT fatal: yt-dlp/site extractors drift and
+      // the metadata is only ever used by the weaker fallback stages, so the fingerprint
+      // (the reel's own sound, via Shazam) still runs and can decide on its own.
+      val info = fetchReelInfo(reelUrl)
 
       var searchFailed = false
       var officialMetadata: OfficialMetadata? = null
       // The official-metadata lookup costs network calls (app API + embed page), so it
       // is resolved lazily and only once, on the first stage that needs it.
-      suspend fun official(): OfficialMetadata =
-        officialMetadata ?: collectOfficialMetadata(reelUrl, info).also { officialMetadata = it }
+      suspend fun official(): OfficialMetadata {
+        officialMetadata?.let { return it }
+        val reel = info ?: return OfficialMetadata(emptyList())
+        return collectOfficialMetadata(reelUrl, reel).also { officialMetadata = it }
+      }
 
       // Stage 1 — fingerprint the reel's actual audio and identify it with Shazam. This
       // needs no account and is an exact match, so it decides first: the
@@ -252,10 +259,16 @@ object ReelMatcher {
         }
       }
 
+      // The reel itself could not be read at all (yt-dlp failed) and fingerprinting found
+      // nothing — surface the retry/manual-search failure screen instead of an empty
+      // picker. If the reel loaded but only the match was inconclusive, the picker (with
+      // its prefilled hint) is the better destination.
+      val reel = info ?: return@withContext MatchResult.Error("Reel could not be fetched")
+
       // Stage 3 — last look at the creator's own text. A caption song marker often names
       // the track; results only reach the picker as candidates, never as an auto-match.
       if (!searchFailed) {
-        val captionQueries = ReelTitleParser.rankedQueryCandidates(info.title, info.caption).second
+        val captionQueries = ReelTitleParser.rankedQueryCandidates(reel.title, reel.caption).second
         val hit = searchQueries(captionQueries.take(MAX_CAPTION_QUERIES), reelUrl) { searchFailed = true }
         if (hit != null) {
           Timber.tag("ReelMatcher").i("Caption query \"%s\" produced candidates", hit.second)
@@ -268,7 +281,7 @@ object ReelMatcher {
       // handle (the picker prefills its search box from this).
       val hint =
         officialMetadata?.queries?.firstOrNull()?.takeIf { it.isNotBlank() }
-          ?: ReelTitleParser.songNameHint(info.title, info.caption)
+          ?: ReelTitleParser.songNameHint(reel.title, reel.caption)
       // Nothing identified automatically: always hand off to the picker, prefilled with the
       // best song-name hint we have (never a dead-end login wall).
       MatchResult.TitleFallback(emptyList(), hint)

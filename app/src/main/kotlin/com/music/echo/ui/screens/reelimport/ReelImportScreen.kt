@@ -11,15 +11,19 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.CircleShape
@@ -130,7 +134,7 @@ fun ReelImportScreen(
       )
     },
   ) { paddingValues ->
-    Box(
+    Column(
       modifier =
         Modifier.fillMaxSize()
           .background(
@@ -142,8 +146,10 @@ fun ReelImportScreen(
             )
           )
           .padding(paddingValues)
-          .padding(16.dp),
-      contentAlignment = Alignment.Center,
+          .verticalScroll(rememberScrollState())
+          .padding(horizontal = 20.dp, vertical = 16.dp),
+      horizontalAlignment = Alignment.CenterHorizontally,
+      verticalArrangement = Arrangement.Center,
     ) {
       when (val state = uiState) {
         is ReelImportUiState.Idle -> IdleContent()
@@ -372,7 +378,7 @@ private fun WorkingContent(stage: ReelImportStage, searchQuery: String? = null) 
 
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(24.dp),
+    verticalArrangement = Arrangement.spacedBy(28.dp),
     modifier = Modifier.fillMaxWidth(),
   ) {
     EqualizerBadge()
@@ -384,10 +390,10 @@ private fun WorkingContent(stage: ReelImportStage, searchQuery: String? = null) 
     )
     Surface(
       color = MaterialTheme.colorScheme.surfaceContainerLow,
-      shape = RoundedCornerShape(22.dp),
+      shape = RoundedCornerShape(24.dp),
       modifier = Modifier.fillMaxWidth().padding(horizontal = 4.dp),
     ) {
-      Column(verticalArrangement = Arrangement.spacedBy(18.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 22.dp)) {
+      Column(verticalArrangement = Arrangement.spacedBy(22.dp), modifier = Modifier.fillMaxWidth().padding(vertical = 26.dp)) {
         WorkingStep(
           label = stringResource(R.string.reel_import_step_reel),
           state = if (stepIndex > 0) StepState.Done else StepState.Current,
@@ -482,7 +488,7 @@ private fun WorkingStep(label: String, state: StepState) {
   Row(
     verticalAlignment = Alignment.CenterVertically,
     horizontalArrangement = Arrangement.spacedBy(12.dp),
-    modifier = Modifier.fillMaxWidth().padding(horizontal = 24.dp),
+    modifier = Modifier.fillMaxWidth().padding(horizontal = 28.dp),
   ) {
     when (state) {
       StepState.Done ->
@@ -490,11 +496,11 @@ private fun WorkingStep(label: String, state: StepState) {
           painter = painterResource(R.drawable.check),
           contentDescription = null,
           tint = MaterialTheme.colorScheme.primary,
-          modifier = Modifier.size(20.dp),
+          modifier = Modifier.size(22.dp),
         )
       StepState.Current ->
         CircularProgressIndicator(
-          modifier = Modifier.size(18.dp),
+          modifier = Modifier.size(20.dp),
           strokeWidth = 2.5.dp,
           color = MaterialTheme.colorScheme.primary,
         )
@@ -532,7 +538,7 @@ private fun ConfirmationContent(
 
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(16.dp),
+    verticalArrangement = Arrangement.spacedBy(20.dp),
     modifier = Modifier.fillMaxWidth(),
   ) {
     Box {
@@ -936,7 +942,7 @@ private fun FinishedContent(
   val defaultName = playlists.firstOrNull { it.playlist.id == defaultPlaylistId }?.playlist?.name
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(20.dp),
+    verticalArrangement = Arrangement.spacedBy(24.dp),
   ) {
     Box {
       Box(
@@ -962,10 +968,10 @@ private fun FinishedContent(
       textAlign = TextAlign.Center,
     )
     if (relatedSongs.isNotEmpty()) {
-      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+      Column(modifier = Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Column(
           modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
-          verticalArrangement = Arrangement.spacedBy(2.dp),
+          verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
           Text(
             text = stringResource(R.string.reel_import_related_title),
@@ -980,12 +986,13 @@ private fun FinishedContent(
         }
         Surface(
           color = MaterialTheme.colorScheme.surfaceContainerLow,
-          shape = RoundedCornerShape(20.dp),
+          shape = RoundedCornerShape(24.dp),
           modifier = Modifier.fillMaxWidth(),
         ) {
           LazyColumn(
-            modifier = Modifier.fillMaxWidth().height(280.dp).padding(vertical = 6.dp),
-            verticalArrangement = Arrangement.spacedBy(6.dp),
+            modifier = Modifier.fillMaxWidth().heightIn(max = 340.dp),
+            contentPadding = PaddingValues(vertical = 8.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp),
           ) {
             itemsIndexed(relatedSongs) { index, song ->
               val added = song.id in addedRelatedIds
@@ -1047,7 +1054,12 @@ private fun FinishedContent(
         )
       }
     }
-    Button(onClick = onDone) { Text(stringResource(android.R.string.ok)) }
+    Button(
+      onClick = onDone,
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(52.dp),
+    ) {
+      Text(stringResource(android.R.string.ok))
+    }
   }
 }
 
@@ -1059,7 +1071,7 @@ private fun FailedContent(
 ) {
   Column(
     horizontalAlignment = Alignment.CenterHorizontally,
-    verticalArrangement = Arrangement.spacedBy(18.dp),
+    verticalArrangement = Arrangement.spacedBy(22.dp),
     modifier = Modifier.fillMaxWidth(),
   ) {
     Box(
@@ -1089,7 +1101,7 @@ private fun FailedContent(
     )
     Surface(
       color = MaterialTheme.colorScheme.surfaceContainerLow,
-      shape = RoundedCornerShape(18.dp),
+      shape = RoundedCornerShape(22.dp),
       modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
     ) {
       Text(
@@ -1097,12 +1109,12 @@ private fun FailedContent(
         style = MaterialTheme.typography.bodyMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         textAlign = TextAlign.Center,
-        modifier = Modifier.fillMaxWidth().padding(16.dp),
+        modifier = Modifier.fillMaxWidth().padding(20.dp),
       )
     }
     Button(
       onClick = onSearchManually,
-      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(52.dp),
+      modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(54.dp),
     ) {
       Text(stringResource(R.string.reel_import_search_manually))
     }
