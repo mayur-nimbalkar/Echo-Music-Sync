@@ -35,6 +35,21 @@ jobs:
         java-version: '21'
         cache: 'gradle'
 
+    - name: Prepare debug keystore
+      run: |
+        # No release secrets are available in this workflow, so the debug build falls back
+        # to the standard Android debug key. Without it `validateSigning*` fails and the
+        # whole analysis run goes red.
+        mkdir -p "$HOME/.android"
+        keytool -genkeypair \
+          -keystore "$HOME/.android/debug.keystore" \
+          -storepass android \
+          -alias androiddebugkey \
+          -keypass android \
+          -dname "CN=Android Debug,O=Android,C=US" \
+          -keyalg RSA \
+          -validity 10000
+
     - name: Initialize CodeQL
       uses: github/codeql-action/init@v4
       with:
@@ -44,7 +59,9 @@ jobs:
     - name: Build project
       run: |
         chmod +x gradlew
-        ./gradlew assembleDebug
+        # One variant is enough for the analysis: `assembleDebug` would build every
+        # abi x variant combination (10 variants).
+        ./gradlew assembleArm64FossDebug
 
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4

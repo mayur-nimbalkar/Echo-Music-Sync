@@ -33,10 +33,10 @@ android {
     applicationId = "echo.music.iad1tya"
     minSdk = 26
     targetSdk = 36
-    // "1.4.1" is the upstream main source version; trailing ".1" marks the fork's add-on.
+    // "1.4.1" is the upstream main source version; the trailing part marks the fork's add-on.
     // versionCode stays monotonic so it installs over previous fork builds.
-    versionCode = 178
-    versionName = "1.4.1.1"
+    versionCode = 179
+    versionName = "1.4.1.2"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
@@ -143,10 +143,24 @@ android {
       keyPassword = System.getenv("KEY_PASSWORD")
     }
     getByName("debug") {
-      keyAlias = "androiddebugkey"
-      keyPassword = "android"
-      storePassword = "android"
-      storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+      // Sign debug APKs with the same permanent keystore as release whenever it is present
+      // (CI decodes it from the KEYSTORE_BASE64 secret). One stable identity means debug
+      // builds update in place too, instead of failing with INSTALL_FAILED_UPDATE_INCOMPATIBLE
+      // because each run generated a fresh debug key. Locally, without the keystore, the
+      // standard Android debug key is used.
+      val sharedKeystore = rootProject.file("keystore.jks")
+      val sharedKeyAlias = System.getenv("KEY_ALIAS")
+      if (sharedKeystore.exists() && !sharedKeyAlias.isNullOrBlank()) {
+        storeFile = sharedKeystore
+        storePassword = System.getenv("STORE_PASSWORD")
+        keyAlias = sharedKeyAlias
+        keyPassword = System.getenv("KEY_PASSWORD")
+      } else {
+        keyAlias = "androiddebugkey"
+        keyPassword = "android"
+        storePassword = "android"
+        storeFile = file("${System.getProperty("user.home")}/.android/debug.keystore")
+      }
     }
   }
 

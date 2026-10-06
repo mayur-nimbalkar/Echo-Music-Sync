@@ -27,75 +27,94 @@ jobs:
         distribution: 'temurin'
         cache: gradle
 
-    - name: Prepare signing keystores
+    - name: Prepare signing keystore
       env:
         KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
         KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
         KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
       run: |
-        mkdir -p "$HOME/.android"
-
-        # Debug key: signs the debug build type.
-        keytool -genkeypair \
-          -keystore "$HOME/.android/debug.keystore" \
-          -storepass android \
-          -alias androiddebugkey \
-          -keypass android \
-          -dname "CN=Android Debug,O=Android,C=US" \
-          -keyalg RSA \
-          -validity 10000
-
+        # Same mechanism as the official Echo Music build: one permanent keystore lives in
+        # repository secrets and is only decoded on the runner. Never commit it. Debug and
+        # release are both signed with this single identity, so a new APK always installs
+        # straight over the previously installed one.
         if [ -n "$KEYSTORE_BASE64" ]; then
-          # Industry standard: the release keystore lives in a repository secret
-          # and is only decoded on the runner. Never commit it.
           printf '%s' "$KEYSTORE_BASE64" | base64 -d > keystore.jks
-          echo "Release keystore decoded from KEYSTORE_BASE64."
+          echo "Signing with the permanent keystore from KEYSTORE_BASE64."
         else
-          # Fallback so a signed release APK can still be produced when no
-          # keystore secret is configured. This key is regenerated on every run,
-          # so consecutive releases cannot update each other in place until the
-          # secrets below are added.
-          echo "::warning::KEYSTORE_BASE64 is not set - signing the release APK with a per-run generated keystore. Add KEYSTORE_BASE64, KEY_ALIAS, KEY_PASSWORD and STORE_PASSWORD secrets for a stable signing identity."
-          keytool -genkeypair \
-            -keystore keystore.jks \
-            -storepass android \
-            -alias echorelease \
-            -keypass android \
-            -dname "CN=Echo Music Add-on,O=mayur-nimbalkar,C=IN" \
-            -keyalg RSA \
-            -validity 10000
-          KEY_ALIAS=echorelease
+          # No secrets configured yet. Build with a throwaway key anyway so the code is
+          # still compiled and its artifacts can be measured, then fail the run at the end:
+          # an APK signed with a per-run key can never update an installed app, and shipping
+          # one is exactly the bug this workflow used to have.
+          echo "THROWAWAY_SIGNING=true" >> "$GITHUB_ENV"
+          keytool -genkeypair -keystore keystore.jks \
+            -storepass android -alias echomusic -keypass android \
+            -dname "CN=Echo Music Fork,O=mayur-nimbalkar,C=IN" \
+            -keyalg RSA -keysize 4096 -validity 10000
+          KEY_ALIAS=echomusic
           KEY_PASSWORD=android
           STORE_PASSWORD=android
+          echo "::warning::KEYSTORE_BASE64 is not set - building with a throwaway key."
         fi
 
-        # Consumed by the release signing config in app/build.gradle.kts.
+        # Consumed by the signing configs in app/build.gradle.kts.
         {
           echo "KEY_ALIAS=$KEY_ALIAS"
           echo "KEY_PASSWORD=$KEY_PASSWORD"
           echo "STORE_PASSWORD=$STORE_PASSWORD"
         } >> "$GITHUB_ENV"
 
-    - name: Build Debug APK
+    # Both flavors are published for now, so the universal APK stays available as a
+    # fallback: it bundles the yt-dlp/FFmpeg native payload for all four ABIs (~270 MB),
+    # while arm64-v8a is the ABI every current Android phone uses and lands around 100 MB.
+    #
+    # Four variants are compiled in this job, and the Kotlin daemon accumulates garbage
+    # across compilations: at the checked-in 3g heap the release compile dies with
+    # "GC overhead limit exceeded". Give it more room (-P overrides gradle.properties) and
+    # start the second build type from a clean daemon.
+    - name: Build Debug APKs (arm64 + universal)
       run: |
         chmod +x gradlew
-        ./gradlew assembleUniversalFossDebug
+        ./gradlew assembleArm64FossDebug assembleUniversalFossDebug \
+          -Pkotlin.daemon.jvmargs=-Xmx6g
 
-    - name: Build Stable (Release) APK
+    - name: Build Stable APKs (arm64 + universal)
       run: |
-        ./gradlew assembleUniversalGmsRelease
+        ./gradlew --stop || true
+        pkill -f KotlinCompileDaemon || true
+        ./gradlew assembleArm64GmsRelease assembleUniversalGmsRelease \
+          -Pkotlin.daemon.jvmargs=-Xmx6g
 
-    - name: Upload Debug APK
+    - name: Upload arm64 Debug APK
       uses: actions/upload-artifact@v7
       with:
-        name: Echo-Music-Debug-APK
-        path: app/build/outputs/apk/**/*debug*.apk
+        name: Echo-Music-arm64-Debug-APK
+        path: app/build/outputs/apk/**/app-arm64-foss-debug.apk
         if-no-files-found: error
 
-    - name: Upload Stable APK
+    - name: Upload universal Debug APK
       uses: actions/upload-artifact@v7
       with:
-        name: Echo-Music-Stable-APK
-        path: app/build/outputs/apk/**/*release*.apk
+        name: Echo-Music-universal-Debug-APK
+        path: app/build/outputs/apk/**/app-universal-foss-debug.apk
         if-no-files-found: error
+
+    - name: Upload arm64 Stable APK
+      uses: actions/upload-artifact@v7
+      with:
+        name: Echo-Music-arm64-Stable-APK
+        path: app/build/outputs/apk/**/app-arm64-gms-release.apk
+        if-no-files-found: error
+
+    - name: Upload universal Stable APK
+      uses: actions/upload-artifact@v7
+      with:
+        name: Echo-Music-universal-Stable-APK
+        path: app/build/outputs/apk/**/app-universal-gms-release.apk
+        if-no-files-found: error
+
+    - name: Require permanent signing
+      if: env.THROWAWAY_SIGNING == 'true'
+      run: |
+        echo "::error::KEYSTORE_BASE64 is not set, so the APKs from this run are signed with a throwaway key and cannot update an installed app. Add KEYSTORE_BASE64, KEY_ALIAS, KEY_PASSWORD and STORE_PASSWORD under Settings -> Secrets and variables -> Actions and re-run this workflow. The artifacts above are build verification only - do not ship them."
+        exit 1

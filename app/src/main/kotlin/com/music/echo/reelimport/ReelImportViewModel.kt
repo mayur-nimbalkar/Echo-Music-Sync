@@ -202,6 +202,10 @@ constructor(
   /**
    * Songs related to the imported track (same album/movie/artist mood), fetched from
    * YouTube Music's related endpoint; falls back to an artist search.
+   *
+   * Both sources are gated through [ReelMatcher.relatedTo], so only tracks that actually
+   * share the imported song's artist or album are offered — the related endpoint also
+   * returns off-topic songs, and a wrong "More like this" list is worse than a short one.
    */
   fun loadRelatedSongs(song: SongItem) {
     _relatedSongs.value = emptyList()
@@ -215,20 +219,17 @@ constructor(
           }
           .getOrNull()
           .orEmpty()
-          .filter { it.id != song.id }
-          .distinctBy { it.id }
-      _relatedSongs.value =
-        if (related.isNotEmpty()) related.take(12) else relatedViaArtist(song)
+      val relevant =
+        ReelMatcher.relatedTo(song, related).take(ReelMatcher.MAX_RELATED_SONGS)
+      _relatedSongs.value = if (relevant.isNotEmpty()) relevant else relatedViaArtist(song)
     }
   }
 
   /** Fallback: songs by the same primary artist. */
   private suspend fun relatedViaArtist(song: SongItem): List<SongItem> {
     val artist = song.artists.firstOrNull()?.name?.takeIf { it.isNotBlank() } ?: return emptyList()
-    return ReelMatcher.search(artist)
-      .filter { it.id != song.id }
-      .distinctBy { it.id }
-      .take(12)
+    return ReelMatcher.relatedTo(song, ReelMatcher.search(artist))
+      .take(ReelMatcher.MAX_RELATED_SONGS)
   }
 
   /** Adds a related song to the playlist the imported song went into. */
