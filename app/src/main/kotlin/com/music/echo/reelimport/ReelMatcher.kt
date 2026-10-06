@@ -91,6 +91,16 @@ object ReelMatcher {
   /** Instagram's public web app id — accepted by the mobile media-info endpoint. */
   private const val IG_WEB_APP_ID = "936619743392459"
 
+  /**
+   * Songs offered as picker candidates. YouTube Music's song filter happily returns ten
+   * hits for a short query, but its tail is almost always a different song — a short,
+   * relevance-ranked list is far more useful than a long one.
+   */
+  private const val MAX_PICKER_CANDIDATES = 5
+
+  /** "More like this" songs offered after a successful import. */
+  const val MAX_RELATED_SONGS = 6
+
   /** One shared client for every Instagram call — building a client per request is pure waste. */
   private val httpClient: okhttp3.OkHttpClient by lazy {
     okhttp3.OkHttpClient.Builder()
@@ -235,7 +245,12 @@ object ReelMatcher {
         }
         // Identified by Shazam but not resolvable on YouTube Music right now: hand the
         // identified name to the picker instead of downgrading to weaker metadata guesses.
-        val candidates = searchYouTubeMusic(recognition.title).orEmpty()
+        val candidates =
+          rankByQuery(
+            recognition.title,
+            searchYouTubeMusic(recognition.title).orEmpty(),
+            MAX_PICKER_CANDIDATES,
+          )
         return@withContext MatchResult.TitleFallback(candidates, label)
       }
 
@@ -250,10 +265,14 @@ object ReelMatcher {
           if (hit != null) {
             Timber.tag("ReelMatcher").i("Official query \"%s\" produced candidates", hit.second)
             // Metadata candidates are not fingerprinted, so identical titles from
-            // different films collide (e.g. "Bulleya" from two soundtracks). Rank them
-            // by the reel's own album/artist so the right one comes first; the user
-            // still confirms, so this only orders the picker.
-            val ranked = rankByMetadata(hit.first, metadata.album, metadata.artist, metadata.track)
+            // different films collide (e.g. "Bulleya" from two soundtracks). Drop the
+            // results that do not match the query at all, rank the rest by the reel's
+            // own album/artist, then cap: the user still confirms, and a long list of
+            // near-misses only gets in the way.
+            val relevant = rankByQuery(hit.second, hit.first)
+            val ranked =
+              rankByMetadata(relevant, metadata.album, metadata.artist, metadata.track)
+                .take(MAX_PICKER_CANDIDATES)
             return@withContext MatchResult.TitleFallback(ranked, hit.second)
           }
         }
@@ -272,7 +291,10 @@ object ReelMatcher {
         val hit = searchQueries(captionQueries.take(MAX_CAPTION_QUERIES), reelUrl) { searchFailed = true }
         if (hit != null) {
           Timber.tag("ReelMatcher").i("Caption query \"%s\" produced candidates", hit.second)
-          return@withContext MatchResult.TitleFallback(hit.first, hit.second)
+          return@withContext MatchResult.TitleFallback(
+            rankByQuery(hit.second, hit.first, MAX_PICKER_CANDIDATES),
+            hit.second,
+          )
         }
       }
 
@@ -350,14 +372,13 @@ object ReelMatcher {
     artist: String?,
     track: String?,
   ): List<SongItem> {
-    fun key(value: String?): String = value.orEmpty().lowercase().filter { it.isLetterOrDigit() }
-    val albumKey = key(album)
-    val artistKey = key(artist)
-    val trackKey = key(track)
+    val albumKey = normalise(album)
+    val artistKey = normalise(artist)
+    val trackKey = normalise(track)
     if (albumKey.isBlank() && artistKey.isBlank()) return songs
     return songs.sortedByDescending { song ->
       var score = 0
-      val songAlbum = key(song.album?.name)
+      val songAlbum = normalise(song.album?.name)
       if (
         albumKey.isNotBlank() &&
           songAlbum.isNotBlank() &&
@@ -365,10 +386,87 @@ object ReelMatcher {
       ) {
         score += 3
       }
-      val songArtist = key(song.artists.joinToString(" ") { it.name })
+      val songArtist = normalise(song.artists.joinToString(" ") { it.name })
       if (artistKey.isNotBlank() && songArtist.contains(artistKey)) score += 2
-      if (trackKey.isNotBlank() && key(song.title) == trackKey) score += 1
+      if (trackKey.isNotBlank() && normalise(song.title) == trackKey) score += 1
       score
+    }
+  }
+
+  /** Lower-cased, punctuation-free form used for every text comparison. */
+  private fun normalise(value: String?): String =
+    value.orEmpty().lowercase().filter { it.isLetterOrDigit() }
+
+  /** Meaningful query words: 3+ alphanumeric characters, duplicates removed. */
+  private fun queryTokens(query: String): List<String> =
+    query
+      .lowercase()
+      .split(Regex("[^\\p{L}\\p{N}]+"))
+      .filter { it.length >= 3 }
+      .distinct()
+
+  /**
+   * How strongly a song matches the query [tokens]. Zero means no word of the query
+   * appears anywhere in the song — YouTube Music's song filter returns those for short or
+   * ambiguous queries, and they used to fill the picker with unrelated tracks.
+   */
+  private fun scoreByTokens(song: SongItem, tokens: List<String>): Int {
+    val title = normalise(song.title)
+    val artists = normalise(song.artists.joinToString(" ") { it.name })
+    val album = normalise(song.album?.name)
+    return tokens.sumOf { token ->
+      when {
+        title.contains(token) -> 3
+        artists.contains(token) -> 2
+        album.contains(token) -> 1
+        else -> 0
+      }
+    }
+  }
+
+  /**
+   * Relevance-ranks a YouTube Music result set for [query] and trims it to [limit].
+   *
+   * Only songs that share at least one meaningful word with the query survive, ordered by
+   * how much of the query they contain (title beats artist beats album). When nothing
+   * matches, YouTube's own order is kept so a search never looks broken — but the list is
+   * still capped, because the tail of a loose result set is guesswork.
+   */
+  fun rankByQuery(query: String, songs: List<SongItem>, limit: Int = Int.MAX_VALUE): List<SongItem> {
+    val unique = songs.distinctBy { it.id }
+    if (unique.isEmpty()) return emptyList()
+    val tokens = queryTokens(query)
+    if (tokens.isEmpty()) return unique.take(limit)
+    val scored = unique.map { it to scoreByTokens(it, tokens) }
+    val matched = scored.filter { it.second > 0 }
+    return (if (matched.isNotEmpty()) matched else scored)
+      .sortedByDescending { it.second }
+      .map { it.first }
+      .take(limit)
+  }
+
+  /**
+   * Keeps only the songs that genuinely belong with [song] — same artist or same album.
+   * YouTube Music's related list is not always on-topic, and the artist-search fallback
+   * returns whatever that query surfaced; unrelated tracks must never be shown as
+   * "more like this".
+   */
+  fun relatedTo(song: SongItem, songs: List<SongItem>): List<SongItem> {
+    val artists = song.artists.map { normalise(it.name) }.filter { it.isNotBlank() }
+    val album = normalise(song.album?.name)
+    return songs.distinctBy { it.id }.filter { candidate ->
+      if (candidate.id == song.id) return@filter false
+      val candidateArtists =
+        candidate.artists.map { normalise(it.name) }.filter { it.isNotBlank() }
+      val candidateAlbum = normalise(candidate.album?.name)
+      candidateArtists.any { candidateArtist ->
+        artists.any { artist ->
+          candidateArtist.contains(artist) || artist.contains(candidateArtist)
+        }
+      } ||
+        (album.isNotBlank() &&
+          candidateAlbum.isNotBlank() &&
+          (candidateAlbum.contains(album) || album.contains(candidateAlbum)))
     }
   }
 
