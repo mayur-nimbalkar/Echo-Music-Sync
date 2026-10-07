@@ -1,5 +1,16 @@
 <?xml version="1.0" encoding="utf-8"?>
 <paths>
+    <!-- The downloaded update APK lives in the app's own Downloads directory. Both paths
+         below can hold it (external storage normally, internal storage when external
+         storage is unavailable), and the installer needs a shareable URI for whichever
+         one was used - a FileProvider that cannot map the file makes the in-app upgrade
+         fail silently. -->
+    <files-path
+        name="internal_files"
+        path="." />
+    <external-files-path
+        name="external_files_dir"
+        path="." />
     <external-path
         name="external_files"
         path="." />
