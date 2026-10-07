@@ -2,6 +2,8 @@ package echo.music.iad1tya.echomusic.updater
 
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
+import android.content.pm.Signature
 import android.net.Uri
 import android.os.Build
 import android.util.Log
@@ -148,6 +150,76 @@ private fun fallbackApkUrl(version: String): String {
   val asset = UpdateAssetPicker.assetName(version, runsOnArm64(), BuildConfig.DEBUG)
   return "$RELEASE_DOWNLOAD_BASE/$version/$asset"
 }
+
+/**
+ * Reads the downloaded APK's own identity and reports the first reason Android would refuse to
+ * install it over this app, or null when it can be installed.
+ *
+ * Android answers a failed install with a bare "App not installed" and no reason — a differently
+ * signed APK, a truncated download and an unsupported CPU all look the same. Checking the same
+ * conditions up front lets the app say what is actually wrong. See [UpdateInstallPreflight].
+ */
+@Suppress("DEPRECATION") // GET_SIGNATURES/versionCode cover minSdk 26 without version branching
+private fun inspectDownloadedApk(context: Context, file: File): UpdateInstallPreflight.Problem? {
+  val packageManager = context.packageManager
+  val archive = packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNATURES)
+  val installed = packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
+  val apkSignatures = signatureDigests(archive?.signatures)
+  return UpdateInstallPreflight.problem(
+    apkPackageName = archive?.packageName,
+    apkVersionCode = archive?.let { it.versionCode.toLong() },
+    apkSignerMatches = apkSignatures.isNotEmpty() && apkSignatures == signatureDigests(installed.signatures),
+    apkAbis = apkAbis(file),
+    deviceAbis = Build.SUPPORTED_ABIS.toList(),
+    installedPackageName = context.packageName,
+    installedVersionCode = installed.versionCode.toLong(),
+  )
+}
+
+/** SHA-256 digests of [signatures], used to tell "same signing key" from "different key". */
+private fun signatureDigests(signatures: Array<Signature>?): Set<String> =
+  signatures.orEmpty().mapTo(LinkedHashSet()) { signature ->
+    java.security.MessageDigest.getInstance("SHA-256")
+      .digest(signature.toByteArray())
+      .joinToString("") { byte -> "%02x".format(byte) }
+  }
+
+/** ABIs the APK ships native code for; empty for a pure-Java APK. */
+private fun apkAbis(file: File): List<String> =
+  runCatching {
+      java.util.zip.ZipFile(file).use { zip ->
+        val abis = LinkedHashSet<String>()
+        val entries = zip.entries()
+        while (entries.hasMoreElements()) {
+          val name = entries.nextElement().name
+          if (name.startsWith("lib/")) {
+            val abi = name.removePrefix("lib/").substringBefore('/')
+            if (abi.isNotBlank()) abis.add(abi)
+          }
+        }
+        abis.toList()
+      }
+    }
+    // An unreadable archive is reported by the package check as an incomplete download.
+    .getOrElse { emptyList() }
+
+/** Plain-language explanation of a failed pre-install check. */
+private fun installProblemMessage(
+  context: Context,
+  problem: UpdateInstallPreflight.Problem,
+): String =
+  when (problem) {
+    UpdateInstallPreflight.Problem.INCOMPLETE_DOWNLOAD ->
+      context.getString(R.string.update_install_incomplete)
+    UpdateInstallPreflight.Problem.DIFFERENT_APPLICATION ->
+      context.getString(R.string.update_install_different_app)
+    UpdateInstallPreflight.Problem.DIFFERENT_SIGNING_KEY ->
+      context.getString(R.string.update_install_different_key)
+    UpdateInstallPreflight.Problem.OLDER_VERSION ->
+      context.getString(R.string.update_install_older_version)
+    UpdateInstallPreflight.Problem.INCOMPATIBLE_ABI ->
+      context.getString(R.string.update_install_incompatible_abi)
+  }
 
 data class ChangelogSection(val title: String, val items: List<String>)
 
@@ -362,15 +434,24 @@ fun UpdateScreen(navController: NavHostController) {
                         downloadProgress = 0f
                         return@AnimatedActionButton
                       }
-                      file.let { f ->
-                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                          if (!context.packageManager.canRequestPackageInstalls()) {
-                            val intent =
-                              Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
-                                .apply { data = Uri.parse("package:${context.packageName}") }
-                            context.startActivity(intent)
-                            return@let
-                          }
+                      scope.launch {
+                        // Never hand a file to the installer without checking it can actually
+                        // replace this app: Android's own refusal message is a bare "App not
+                        // installed" that says nothing about the reason.
+                        val problem = inspectDownloadedApk(context, file)
+                        if (problem != null) {
+                          snackbarHostState.showSnackbar(installProblemMessage(context, problem))
+                          return@launch
+                        }
+                        if (
+                          Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                            !context.packageManager.canRequestPackageInstalls()
+                        ) {
+                          val intent =
+                            Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES)
+                              .apply { data = Uri.parse("package:${context.packageName}") }
+                          context.startActivity(intent)
+                          return@launch
                         }
                         val uri =
                           FileProvider.getUriForFile(

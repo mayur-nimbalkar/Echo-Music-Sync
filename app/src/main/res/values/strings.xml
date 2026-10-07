@@ -1000,5 +1000,13 @@
     <string name="import_custom_font">Import Custom Font</string>
     <string name="typography_preview">Typography Preview</string>
     <string name="preview_text_quote">The quick brown fox jumps over the lazy dog</string>
+
+    <!-- Why a downloaded update APK cannot be installed. Android only shows a bare
+         "App not installed", so the app reports the actual reason itself. -->
+    <string name="update_install_incomplete">The downloaded file is not a complete APK. Delete it and download the update again.</string>
+    <string name="update_install_different_app">That APK is a different application, so it cannot update this one. Install the build that matches this app.</string>
+    <string name="update_install_different_key">This APK is signed with a different key than the installed app, so Android will not replace it. Uninstall the earlier build once, then install this APK - every later update installs in place.</string>
+    <string name="update_install_older_version">This APK is older than the installed app, so Android would refuse the downgrade. Install the newer build.</string>
+    <string name="update_install_incompatible_abi">This APK has no native code for this device CPU. Download the universal APK instead.</string>
 </resources>
 
