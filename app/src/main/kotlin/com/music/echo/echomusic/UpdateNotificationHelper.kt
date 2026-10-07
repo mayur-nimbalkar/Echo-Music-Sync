@@ -13,6 +13,7 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.net.toUri
 import echo.music.iad1tya.R
+import echo.music.iad1tya.echomusic.updater.RELEASES_PAGE_URL
 
 object UpdateNotificationHelper {
   private const val CHANNEL_ID = "updates"
@@ -31,8 +32,9 @@ object UpdateNotificationHelper {
       nm.createNotificationChannel(channel)
     }
 
-    val apkUrl = "https://echomusic.fun"
-    val intent = Intent(Intent.ACTION_VIEW, apkUrl.toUri())
+    // This fork's own releases. Upstream's APKs are signed with a different key and can never
+    // install over this build, so sending the tap there would just fail.
+    val intent = Intent(Intent.ACTION_VIEW, RELEASES_PAGE_URL.toUri())
 
     val flags = PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
     val pending = PendingIntent.getActivity(context, NOTIFICATION_ID, intent, flags)

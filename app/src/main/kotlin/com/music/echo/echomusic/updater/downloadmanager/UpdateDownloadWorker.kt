@@ -65,8 +65,12 @@ class UpdateDownloadWorker(private val context: Context, workerParams: WorkerPar
         val fileLength = connection.contentLength
         val inputStream = connection.inputStream
 
-        val downloadDir =
-          File(context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS), "echo_updates")
+        // getExternalFilesDir returns null when external storage is unavailable (unmounted,
+        // or a device that reports none). Fall back to internal storage instead of failing the
+        // whole update: provider_paths.xml exposes both directories to the installer.
+        val baseDir =
+          context.getExternalFilesDir(Environment.DIRECTORY_DOWNLOADS) ?: context.filesDir
+        val downloadDir = File(baseDir, "echo_updates")
         if (!downloadDir.exists()) {
           downloadDir.mkdirs()
         }

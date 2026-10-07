@@ -121,45 +121,33 @@ const val RELEASES_PAGE_URL = "https://github.com/$RELEASES_REPO/releases/latest
 private const val RELEASES_LIST_URL = "https://api.github.com/repos/$RELEASES_REPO/releases"
 private const val RELEASE_DOWNLOAD_BASE = "https://github.com/$RELEASES_REPO/releases/download"
 
-/** APK asset naming published by the release workflow: `Echo-Music-<tag>-<abi>-<type>.apk`. */
-private const val APK_ASSET_PREFIX = "Echo-Music"
-
 /** True when this device's primary ABI is arm64 — the small (~100 MB) release build. */
 private fun runsOnArm64(): Boolean =
   Build.SUPPORTED_ABIS.any { it.equals("arm64-v8a", ignoreCase = true) }
 
-/** The ABI label of the asset this device should install. */
-private fun preferredAbiLabel(): String = if (runsOnArm64()) "arm64" else "universal"
-
 /**
- * Picks the APK asset this device should install: the release's stable build for this
- * device's ABI. Debug builds are never chosen — they carry a different application id and
- * would install as a second app instead of updating this one.
+ * The APK asset this device should install: the build type that is actually installed (a debug
+ * install must be upgraded with the debug asset, a stable install with the stable one — they
+ * are different applications) for this device's ABI. See [UpdateAssetPicker].
  */
 private fun pickApkAsset(assets: JSONArray): JSONObject? {
-  val wantsArm64 = runsOnArm64()
-  var best: JSONObject? = null
-  var bestScore = -1
+  val byName = LinkedHashMap<String, JSONObject>()
   for (i in 0 until assets.length()) {
     val asset = assets.optJSONObject(i) ?: continue
     val name = asset.optString("name")
-    if (!name.endsWith(".apk", ignoreCase = true)) continue
-    val lower = name.lowercase()
-    if (lower.contains("debug")) continue
-    var score = 0
-    if (lower.contains("stable")) score += 4
-    if (lower.contains("arm64") == wantsArm64) score += 2
-    if (score > bestScore) {
-      bestScore = score
-      best = asset
-    }
+    if (name.isNotEmpty()) byName.putIfAbsent(name, asset)
   }
-  return best
+  val picked =
+    UpdateAssetPicker.bestApkName(byName.keys.toList(), runsOnArm64(), BuildConfig.DEBUG)
+      ?: return null
+  return byName[picked]
 }
 
 /** Download URL for [version] used when the release JSON carried no asset URL. */
-private fun fallbackApkUrl(version: String): String =
-  "$RELEASE_DOWNLOAD_BASE/$version/$APK_ASSET_PREFIX-$version-${preferredAbiLabel()}-stable.apk"
+private fun fallbackApkUrl(version: String): String {
+  val asset = UpdateAssetPicker.assetName(version, runsOnArm64(), BuildConfig.DEBUG)
+  return "$RELEASE_DOWNLOAD_BASE/$version/$asset"
+}
 
 data class ChangelogSection(val title: String, val items: List<String>)
 
@@ -721,31 +709,13 @@ private fun formatGitHubDate(githubDate: String): String =
     githubDate
   }
 
-fun isNewerVersion(latestVersion: String, currentVersion: String): Boolean {
-  val latestVersionClean = latestVersion.removePrefix("b").removePrefix("v")
-  val currentVersionClean = currentVersion.removePrefix("b").removePrefix("v")
-
-  val latestParts = latestVersionClean.split(".").map { it.toIntOrNull() ?: 0 }
-  val currentParts = currentVersionClean.split(".").map { it.toIntOrNull() ?: 0 }
-
-  for (i in 0 until maxOf(latestParts.size, currentParts.size)) {
-    val latest = latestParts.getOrElse(i) { 0 }
-    val current = currentParts.getOrElse(i) { 0 }
-    when {
-      latest > current -> return true
-      latest < current -> return false
-    }
-  }
-
-  if (latestVersionClean == currentVersionClean) {
-    val latestIsBeta = latestVersion.startsWith("b")
-    val currentIsBeta = currentVersion.startsWith("b")
-
-    if (currentIsBeta && !latestIsBeta) return true
-  }
-
-  return false
-}
+/**
+ * True only when [latestVersion] is strictly newer than [currentVersion] — a build ahead of the
+ * newest release, at any version level, must never report an update. Rules live in
+ * [UpdateVersionRules].
+ */
+fun isNewerVersion(latestVersion: String, currentVersion: String): Boolean =
+  UpdateVersionRules.isNewerVersion(latestVersion, currentVersion)
 
 suspend fun checkForUpdate(
   context: Context,
