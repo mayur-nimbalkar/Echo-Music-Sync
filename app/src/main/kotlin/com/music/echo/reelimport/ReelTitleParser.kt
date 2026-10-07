@@ -203,6 +203,10 @@ object ReelTitleParser {
   fun looksLikeHandle(value: String): Boolean {
     val trimmed = value.trim().removePrefix("@")
     if (trimmed.isEmpty() || !HANDLE_LIKE.matches(trimmed)) return false
+    // A trailing dot/underscore is punctuation, not handle syntax: Instagram handles
+    // never start or end with one, but song fragments do ("Mr.", "etc."). Treating
+    // them as handles silently dropped real titles from the search box.
+    if (trimmed.endsWith(".") || trimmed.endsWith("_")) return false
     return trimmed.any { it.isDigit() || it == '.' || it == '_' }
   }
 
@@ -264,11 +268,13 @@ object ReelTitleParser {
 
   /**
    * Ordered, de-duplicated search queries from reel metadata — the legacy flat view.
-   * Strong hints first, then weak ones (see [rankedQueryCandidates]).
+   * Strong hints first, then weak ones (see [rankedQueryCandidates]). A hint that is both
+   * strong and weak (a `song:` line also present as a caption line) appears once, so the
+   * matcher does not run the same search twice.
    */
   fun queryCandidates(rawTitle: String?, caption: String? = null): List<String> {
     val (strong, weak) = rankedQueryCandidates(rawTitle, caption)
-    return strong + weak
+    return (strong + weak).distinct()
   }
 
   /**
@@ -329,6 +335,30 @@ object ReelTitleParser {
     }
 
     return strong.toList() to weak.toList()
+  }
+
+  /** Meaningful words of a query: 3+ alphanumeric characters, de-duplicated. */
+  private fun wordsOf(query: String): List<String> =
+    query
+      .lowercase()
+      .split(Regex("[^\\p{L}\\p{N}]+"))
+      .filter { it.length >= 3 }
+      .distinct()
+
+  /**
+   * True when [query] is specific enough to be searched without the user's help.
+   *
+   * A lone word mined out of a caption ("Audience", "Vibes", "Trending") is a topic, not a
+   * song: YouTube Music's song filter happily answers it with a page of unrelated tracks
+   * that merely contain that word, which is exactly how the candidate picker used to fill
+   * up with junk. Two or more meaningful words are treated as a title. Explicit hints —
+   * `song:` markers, ♪ fragments, quotes, official track/artist fields — are never filtered
+   * this way, so a one-word official track name still gets searched.
+   */
+  fun isSpecificQuery(query: String): Boolean {
+    val value = query.trim()
+    if (value.isEmpty()) return false
+    return wordsOf(value).size >= 2
   }
 
   /** Cleans one candidate line: strips noise prefixes, tags, emojis and extra quotes. */

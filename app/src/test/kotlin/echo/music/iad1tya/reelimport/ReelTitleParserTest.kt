@@ -142,6 +142,33 @@ class ReelTitleParserTest {
   }
 
   @Test
+  fun `single word caption queries are not specific enough to auto-search`() {
+    // A lone word mined from a caption is a topic, not a song title: YouTube Music's song
+    // filter answers it with a page of unrelated tracks that merely contain the word.
+    assertTrue(!ReelTitleParser.isSpecificQuery("Audience"))
+    assertTrue(!ReelTitleParser.isSpecificQuery("Vibes"))
+    assertTrue(!ReelTitleParser.isSpecificQuery(""))
+    assertTrue(!ReelTitleParser.isSpecificQuery("a b"))
+    assertTrue(ReelTitleParser.isSpecificQuery("Golden Hour"))
+    assertTrue(ReelTitleParser.isSpecificQuery("Golden Hour - Artist Two"))
+    assertTrue(ReelTitleParser.isSpecificQuery("summer.2019 nights"))
+  }
+
+  @Test
+  fun `a bare caption word stays weak and is filterable by the matcher`() {
+    val (strong, weak) = ReelTitleParser.rankedQueryCandidates(null, "Audience")
+    assertTrue(strong.isEmpty())
+    assertEquals(listOf("Audience"), weak)
+    assertTrue(weak.none { ReelTitleParser.isSpecificQuery(it) })
+  }
+
+  @Test
+  fun `explicit song markers stay usable even as a single word`() {
+    val (strong, _) = ReelTitleParser.rankedQueryCandidates(null, "song: Kesariya")
+    assertEquals(listOf("Kesariya"), strong)
+  }
+
+  @Test
   fun `placeholder title and caption noise are weak, not strong`() {
     // Typical reel where Instagram gives no track info and the caption is noise:
     // nothing here may count as a strong hint that would win over fingerprinting.

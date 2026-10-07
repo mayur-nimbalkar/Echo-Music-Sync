@@ -78,6 +78,14 @@ jobs:
         ./gradlew assembleArm64FossDebug assembleUniversalFossDebug \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
+    # The unit tests were never run by CI, which is how two real parser bugs (duplicate
+    # query candidates, and "Mr." being mistaken for an Instagram handle) shipped
+    # unnoticed in earlier releases. They are fast and pure-JVM.
+    - name: Run unit tests
+      run: |
+        ./gradlew testArm64FossDebugUnitTest \
+          -Pkotlin.daemon.jvmargs=-Xmx6g
+
     - name: Build Stable APKs (arm64 + universal)
       run: |
         ./gradlew --stop || true
