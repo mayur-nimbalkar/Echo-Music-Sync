@@ -287,7 +287,14 @@ object ReelMatcher {
       // Stage 3 — last look at the creator's own text. A caption song marker often names
       // the track; results only reach the picker as candidates, never as an auto-match.
       if (!searchFailed) {
-        val captionQueries = ReelTitleParser.rankedQueryCandidates(reel.title, reel.caption).second
+        // Only caption lines that read like a title are searched. A lone word mined from
+        // a caption ("Audience", "Vibes", "Trending") is a topic, not a song, and YouTube
+        // Music answers it with a page of unrelated tracks that merely contain the word —
+        // that is what made the automatic candidates untrustworthy. The word still
+        // prefills the manual search box below, so nothing is lost.
+        val captionQueries =
+          ReelTitleParser.rankedQueryCandidates(reel.title, reel.caption).second
+            .filter { ReelTitleParser.isSpecificQuery(it) }
         val hit = searchQueries(captionQueries.take(MAX_CAPTION_QUERIES), reelUrl) { searchFailed = true }
         if (hit != null) {
           Timber.tag("ReelMatcher").i("Caption query \"%s\" produced candidates", hit.second)

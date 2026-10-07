@@ -37,11 +37,14 @@ import echo.music.iad1tya.BuildConfig
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.R
 import echo.music.iad1tya.echomusic.component.UpdateInfoDialog
+import echo.music.iad1tya.echomusic.updater.LATEST_RELEASE_URL
+import echo.music.iad1tya.echomusic.updater.RELEASES_PAGE_URL
 import echo.music.iad1tya.echomusic.updater.autoClearOldApks
 import echo.music.iad1tya.echomusic.updater.getAutoUpdateCheckSetting
 import echo.music.iad1tya.echomusic.updater.getBetaUpdatesSetting
 import echo.music.iad1tya.echomusic.updater.getDownloadedApkCount
 import echo.music.iad1tya.echomusic.updater.getUpdateNotificationsSetting
+import echo.music.iad1tya.echomusic.updater.openTimedStream
 import echo.music.iad1tya.ui.component.IconButton
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
 import echo.music.iad1tya.ui.component.Material3SettingsItem
@@ -83,11 +86,12 @@ fun UpdateSettings(
 
     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
       try {
-        val url =
-          java.net.URL("https://api.github.com/repos/EchoMusicApp/Echo-Music/releases/latest")
-        val json = url.openStream().bufferedReader().use { it.readText() }
+        // This fork's own latest release — upstream's notes describe a version this build
+        // does not contain (and upstream's APKs cannot install over it).
+        val json = openTimedStream(LATEST_RELEASE_URL).bufferedReader().use { it.readText() }
         val targetRelease = JSONObject(json)
-        releaseNotes = targetRelease.getString("body")
+        // optString: a release body is optional, and getString would surface "null".
+        releaseNotes = targetRelease.optString("body").takeIf { it.isNotBlank() }
       } catch (e: Exception) {
         e.printStackTrace()
       }
@@ -124,7 +128,7 @@ fun UpdateSettings(
               Text(stringResource(R.string.version, BuildConfig.VERSION_NAME))
             },
             onClick = {
-              val intent = Intent(Intent.ACTION_VIEW, Uri.parse("https://echomusic.fun"))
+              val intent = Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE_URL))
               context.startActivity(intent)
             }
           )
@@ -133,7 +137,7 @@ fun UpdateSettings(
 
     Text(
       text =
-        "To download updates, you will be redirected to our official site containing ads. This helps fund the app's development. Thank you for your support!",
+        "Updates for this build are published on its own GitHub releases page. Install the APK offered there: upstream Echo Music and this fork are signed with different keys, so one can never install over the other.",
       style = MaterialTheme.typography.bodySmall,
       color = MaterialTheme.colorScheme.onSurfaceVariant,
       modifier = Modifier.padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp)

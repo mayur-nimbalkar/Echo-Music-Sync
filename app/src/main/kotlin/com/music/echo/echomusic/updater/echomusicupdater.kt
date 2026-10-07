@@ -101,6 +101,66 @@ import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
+/**
+ * The repository this build updates from.
+ *
+ * This app is a fork of Echo Music. Upstream publishes under `EchoMusicApp/Echo-Music`, and
+ * its APKs are signed with upstream's own key, so installing one over this build fails with
+ * "App not installed" (INSTALL_FAILED_UPDATE_INCOMPATIBLE) no matter what. The updater must
+ * therefore only ever offer THIS repository's releases, which are signed with the fork's
+ * permanent key and install straight over the previous build.
+ */
+const val RELEASES_REPO = "mayur-nimbalkar/Echo-Music-Sync"
+
+/** Latest published release of this fork (JSON). */
+const val LATEST_RELEASE_URL = "https://api.github.com/repos/$RELEASES_REPO/releases/latest"
+
+/** Human-readable releases page — where users should be sent to download an APK. */
+const val RELEASES_PAGE_URL = "https://github.com/$RELEASES_REPO/releases/latest"
+
+private const val RELEASES_LIST_URL = "https://api.github.com/repos/$RELEASES_REPO/releases"
+private const val RELEASE_DOWNLOAD_BASE = "https://github.com/$RELEASES_REPO/releases/download"
+
+/** APK asset naming published by the release workflow: `Echo-Music-<tag>-<abi>-<type>.apk`. */
+private const val APK_ASSET_PREFIX = "Echo-Music"
+
+/** True when this device's primary ABI is arm64 — the small (~100 MB) release build. */
+private fun runsOnArm64(): Boolean =
+  Build.SUPPORTED_ABIS.any { it.equals("arm64-v8a", ignoreCase = true) }
+
+/** The ABI label of the asset this device should install. */
+private fun preferredAbiLabel(): String = if (runsOnArm64()) "arm64" else "universal"
+
+/**
+ * Picks the APK asset this device should install: the release's stable build for this
+ * device's ABI. Debug builds are never chosen — they carry a different application id and
+ * would install as a second app instead of updating this one.
+ */
+private fun pickApkAsset(assets: JSONArray): JSONObject? {
+  val wantsArm64 = runsOnArm64()
+  var best: JSONObject? = null
+  var bestScore = -1
+  for (i in 0 until assets.length()) {
+    val asset = assets.optJSONObject(i) ?: continue
+    val name = asset.optString("name")
+    if (!name.endsWith(".apk", ignoreCase = true)) continue
+    val lower = name.lowercase()
+    if (lower.contains("debug")) continue
+    var score = 0
+    if (lower.contains("stable")) score += 4
+    if (lower.contains("arm64") == wantsArm64) score += 2
+    if (score > bestScore) {
+      bestScore = score
+      best = asset
+    }
+  }
+  return best
+}
+
+/** Download URL for [version] used when the release JSON carried no asset URL. */
+private fun fallbackApkUrl(version: String): String =
+  "$RELEASE_DOWNLOAD_BASE/$version/$APK_ASSET_PREFIX-$version-${preferredAbiLabel()}-stable.apk"
+
 data class ChangelogSection(val title: String, val items: List<String>)
 
 sealed class EchoUpdateStatus {
@@ -340,8 +400,7 @@ fun UpdateScreen(navController: NavHostController) {
                       }
                     } else {
                       val urlToDownload =
-                        currentStatus.apkUrl
-                          ?: "https://github.com/EchoMusicApp/Echo-Music/releases/download/${currentStatus.version}/echomusic.apk"
+                        currentStatus.apkUrl ?: fallbackApkUrl(currentStatus.version)
 
                       val constraints =
                         Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build()
@@ -705,15 +764,15 @@ suspend fun checkForUpdate(
 ) {
   withContext(Dispatchers.IO) {
     try {
-      val url = URL("https://api.github.com/repos/EchoMusicApp/Echo-Music/releases/latest")
-      val json = url.openStream().bufferedReader().use { it.readText() }
+      val json = openTimedStream(LATEST_RELEASE_URL).bufferedReader().use { it.readText() }
       val targetRelease = JSONObject(json)
 
       val currentVersion = BuildConfig.VERSION_NAME
       val targetTagName = targetRelease.getString("tag_name")
-      val currentClean = currentVersion.removePrefix("b").removePrefix("v").trim()
-      val targetClean = targetTagName.removePrefix("b").removePrefix("v").trim()
-      val shouldShow = currentClean != targetClean
+      // Semantic comparison instead of string inequality: a fork build can legitimately be
+      // newer than the newest release (local/nightly builds), and "1.4.1.20" is a different
+      // string from "1.4.1.2" while being a newer version.
+      val shouldShow = isNewerVersion(targetTagName, currentVersion)
 
       if (shouldShow) {
         val tagWithPrefix = targetRelease.getString("tag_name")
@@ -723,11 +782,8 @@ suspend fun checkForUpdate(
         var description: String? = null
         var imageUrl: String? = null
         try {
-          val changelogUrl =
-            URL(
-              "https://github.com/EchoMusicApp/Echo-Music/releases/download/$tagWithPrefix/changelog.json"
-            )
-          val changelogJson = changelogUrl.openStream().bufferedReader().use { it.readText() }
+          val changelogUrl = "$RELEASE_DOWNLOAD_BASE/$tagWithPrefix/changelog.json"
+          val changelogJson = openTimedStream(changelogUrl).bufferedReader().use { it.readText() }
           val changelogData = JSONObject(changelogJson)
 
           description = changelogData.optString("description").takeIf { it.isNotEmpty() }
@@ -765,18 +821,9 @@ suspend fun checkForUpdate(
 
         var apkSizeInMB = ""
         var apkDownloadUrl = ""
-        for (j in 0 until assets.length()) {
-          val asset = assets.getJSONObject(j)
-          val assetName = asset.getString("name")
-          if (
-            assetName.endsWith(".apk", ignoreCase = true) &&
-              !assetName.lowercase().contains("debug")
-          ) {
-            val apkSizeInBytes = asset.getLong("size")
-            apkSizeInMB = String.format("%.1f", apkSizeInBytes / (1024.0 * 1024.0))
-            apkDownloadUrl = asset.getString("browser_download_url")
-            break
-          }
+        pickApkAsset(assets)?.let { asset ->
+          apkSizeInMB = String.format("%.1f", asset.getLong("size") / (1024.0 * 1024.0))
+          apkDownloadUrl = asset.getString("browser_download_url")
         }
 
         if (apkDownloadUrl.isNotEmpty()) {
@@ -827,7 +874,7 @@ data class WhatsNewInfo(
  * URLConnection defaults both connect and read timeouts to 0 (infinite) — opening a stream without
  * setting them can hang this Dispatchers.IO call indefinitely on a stalled request.
  */
-private fun openTimedStream(url: String): java.io.InputStream =
+internal fun openTimedStream(url: String): java.io.InputStream =
   (URL(url).openConnection() as java.net.URLConnection)
     .apply {
       connectTimeout = 15_000
@@ -845,9 +892,7 @@ suspend fun fetchChangelogForVersion(currentVersion: String): WhatsNewInfo? =
     try {
       val cleanCurrent = currentVersion.removePrefix("b").removePrefix("v").trim()
       val releasesJson =
-        openTimedStream("https://api.github.com/repos/EchoMusicApp/Echo-Music/releases")
-          .bufferedReader()
-          .use { it.readText() }
+        openTimedStream(RELEASES_LIST_URL).bufferedReader().use { it.readText() }
       val releases = JSONArray(releasesJson)
 
       var matchedRelease: JSONObject? = null
@@ -866,9 +911,7 @@ suspend fun fetchChangelogForVersion(currentVersion: String): WhatsNewInfo? =
       var description: String? = null
       try {
         val changelogJson =
-          openTimedStream(
-              "https://github.com/EchoMusicApp/Echo-Music/releases/download/$tag/changelog.json"
-            )
+          openTimedStream("$RELEASE_DOWNLOAD_BASE/$tag/changelog.json")
             .bufferedReader()
             .use { it.readText() }
         val changelogData = JSONObject(changelogJson)
