@@ -862,8 +862,6 @@ val ReelImportDefaultPlaylistIdKey = stringPreferencesKey("reelImportDefaultPlay
 
 val AmbientSpacingKey = floatPreferencesKey("ambient_spacing")
 
-val AmbientSpacingKey = floatPreferencesKey("ambient_spacing")
-
 enum class AppFont(val value: String) {
   SYSTEM("system"),
   GOOGLE_SANS("google_sans"),
