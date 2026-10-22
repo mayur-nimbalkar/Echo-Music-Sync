@@ -1023,8 +1023,6 @@
     <string name="update_install_different_key">This APK is signed with a different key than the installed app, so Android will not replace it. Uninstall the earlier build once, then install this APK - every later update installs in place.</string>
     <string name="update_install_older_version">This APK is older than the installed app, so Android would refuse the downgrade. Install the newer build.</string>
     <string name="update_install_incompatible_abi">This APK has no native code for this device CPU. Download the universal APK instead.</string>
-</resources>
-
 
     <string name="recommendation_source">Recommendation provider</string>
     <string name="recommendation_source_youtube">YouTube Music</string>
