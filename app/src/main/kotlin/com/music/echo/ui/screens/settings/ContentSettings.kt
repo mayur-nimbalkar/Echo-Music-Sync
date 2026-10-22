@@ -47,6 +47,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -142,6 +143,7 @@ fun ContentSettings(
   val scrollState = androidx.compose.foundation.rememberScrollState()
 
   val context = LocalContext.current
+  val scope = rememberCoroutineScope()
 
 
   val (spotifySpDc) = rememberPreference(key = SpotifySpDcKey, defaultValue = "")
