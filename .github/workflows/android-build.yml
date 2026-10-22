@@ -75,29 +75,33 @@ jobs:
     - name: Run unit tests
       run: |
         chmod +x gradlew
-        ./gradlew :core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64FossDebugUnitTest \
+        ./gradlew :core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64GmsDebugUnitTest \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
-    # Only debug APKs are published. The universal APK stays available as a fallback: it
-    # bundles the yt-dlp/FFmpeg native payload for all four ABIs (~300 MB), while
-    # arm64-v8a is the ABI every current Android phone uses and lands around 140 MB.
+    # Only debug APKs are published. They are built from the gms flavor on purpose: the foss
+    # flavor removes REQUEST_INSTALL_PACKAGES (F-Droid policy) and the Cast provider, and this
+    # fork's whole point is installing its own updates, so a foss build could neither launch
+    # the installer nor offer Cast.
+    #
+    # The universal APK stays available as a fallback: it bundles the yt-dlp/FFmpeg native
+    # payload for all four ABIs, while arm64-v8a is the ABI every current Android phone uses.
     - name: Build Debug APKs (arm64 + universal)
       run: |
-        ./gradlew assembleArm64FossDebug assembleUniversalFossDebug \
+        ./gradlew assembleArm64GmsDebug assembleUniversalGmsDebug \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
     - name: Upload arm64 Debug APK
       uses: actions/upload-artifact@v7
       with:
         name: Echo-Music-arm64-Debug-APK
-        path: app/build/outputs/apk/**/app-arm64-foss-debug.apk
+        path: app/build/outputs/apk/**/app-arm64-gms-debug.apk
         if-no-files-found: error
 
     - name: Upload universal Debug APK
       uses: actions/upload-artifact@v7
       with:
         name: Echo-Music-universal-Debug-APK
-        path: app/build/outputs/apk/**/app-universal-foss-debug.apk
+        path: app/build/outputs/apk/**/app-universal-gms-debug.apk
         if-no-files-found: error
 
     - name: Require permanent signing
