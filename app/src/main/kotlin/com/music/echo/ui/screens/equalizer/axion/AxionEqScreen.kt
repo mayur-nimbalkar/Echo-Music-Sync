@@ -30,7 +30,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import echo.music.iad1tya.R
-import echo.music.iad1tya.eq.data.SavedEQProfile
+import echo.music.dsp.core.models.SavedEQProfile
 import echo.music.iad1tya.ui.component.Material3SettingsGroup
 import echo.music.iad1tya.ui.component.Material3SettingsItem
 import kotlin.math.abs

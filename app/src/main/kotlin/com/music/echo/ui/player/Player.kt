@@ -302,6 +302,7 @@ fun BottomSheetPlayer(
     rememberPreference(echo.music.iad1tya.constants.HidePlayerSliderKey, false)
   val (hidePlayerThumbnail, onHidePlayerThumbnailChange) =
     rememberPreference(HidePlayerThumbnailKey, false)
+  val showSeekButtons by rememberPreference(echo.music.iad1tya.constants.ShowSeekButtonsKey, false)
   val cropAlbumArt by rememberPreference(CropAlbumArtKey, false)
   val showLyricsOnPlayer by rememberPreference(ShowLyricsOnPlayerKey, false)
   val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
@@ -934,7 +935,10 @@ fun BottomSheetPlayer(
         delay(200)
         if (sliderPosition == null) {
           position = playerConnection.player.currentPosition
-          duration = playerConnection.player.duration
+          duration = echo.music.iad1tya.playback.PlaybackCutoffGuard.computeEffectiveDuration(
+            mediaMetadata?.duration,
+            playerConnection.player.duration
+          )
         }
       }
     }
@@ -943,7 +947,10 @@ fun BottomSheetPlayer(
   LaunchedEffect(playbackState, mediaMetadata?.id) {
     if (!isCasting) {
       position = playerConnection.player.currentPosition
-      duration = playerConnection.player.duration
+      duration = echo.music.iad1tya.playback.PlaybackCutoffGuard.computeEffectiveDuration(
+        mediaMetadata?.duration,
+        playerConnection.player.duration
+      )
     }
   }
 
@@ -2404,6 +2411,26 @@ fun BottomSheetPlayer(
             fadeOut()
       ) {
         Column {
+          if (showSeekButtons) {
+            SeekButtons(
+              enabled =
+                !isListenTogetherGuest &&
+                  (if (isCasting) castDuration > 0
+                  else playerConnection.player.isCurrentMediaItemSeekable),
+              color = TextBackgroundColor,
+              onSeek = { offsetMs ->
+                val currentPosition =
+                  if (isCasting) castPosition else playerConnection.player.currentPosition
+                val currentDuration =
+                  if (isCasting) castDuration else playerConnection.player.duration
+                playerConnection.seekTo(
+                  echo.music.iad1tya.playback.seekButtonTarget(
+                    currentPosition, currentDuration, offsetMs
+                  )
+                )
+              }
+            )
+          }
           if (useNewPlayerDesign) {
             Row(
               horizontalArrangement = Arrangement.Center,
@@ -2974,6 +3001,7 @@ fun BottomSheetPlayer(
 fun InlineLyricsView(
   mediaMetadata: MediaMetadata?,
   showLyrics: Boolean,
+  modifier: Modifier = Modifier,
   positionProvider: () -> Long
 ) {
   val playerConnection = LocalPlayerConnection.current ?: return
@@ -3012,7 +3040,7 @@ fun InlineLyricsView(
   }
 
   Box(
-    modifier = Modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
+    modifier = modifier.fillMaxSize().clip(RoundedCornerShape(12.dp)),
     contentAlignment = Alignment.Center
   ) {
     when {

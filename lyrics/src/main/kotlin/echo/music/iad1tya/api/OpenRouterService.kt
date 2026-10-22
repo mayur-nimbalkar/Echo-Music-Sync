@@ -19,6 +19,18 @@ object OpenRouterService {
       .build()
   private val JSON = "application/json; charset=utf-8".toMediaType()
 
+  fun isUrlSafe(url: String): Boolean {
+    if (url.isBlank()) return true
+    val uri = runCatching { java.net.URI(url.trim()) }.getOrNull() ?: return false
+    val scheme = uri.scheme?.lowercase() ?: return false
+    if (scheme != "https" && scheme != "http") return false
+    val host = uri.host?.lowercase() ?: return false
+    if (host == "169.254.169.254" || host.startsWith("169.254.") || host == "metadata.google.internal" || host == "instance-data") {
+      return false
+    }
+    return true
+  }
+
   suspend fun translate(
     text: String,
     targetLanguage: String,
@@ -31,6 +43,10 @@ object OpenRouterService {
     onLog: ((String) -> Unit)? = null
   ): Result<List<String>> =
     withContext(Dispatchers.IO) {
+      val effectiveUrl = baseUrl.ifBlank { "https://openrouter.ai/api/v1/chat/completions" }
+      if (!isUrlSafe(effectiveUrl)) {
+        return@withContext Result.failure(SecurityException("Invalid or restricted endpoint destination"))
+      }
       onLog?.invoke("Starting translation...")
       var currentAttempt = 0
 
@@ -248,4 +264,79 @@ Output MUST be a JSON array with EXACTLY $lineCount strings."""
       }
       return@withContext Result.failure(Exception("Max retries exceeded"))
     }
+
+  suspend fun testConnection(
+    baseUrl: String,
+    apiKey: String,
+    model: String
+  ): Result<String> =
+    withContext(Dispatchers.IO) {
+      val effectiveUrl = baseUrl.ifBlank { "https://openrouter.ai/api/v1/chat/completions" }
+      if (!isUrlSafe(effectiveUrl)) {
+        return@withContext Result.failure(SecurityException("Invalid or restricted endpoint destination"))
+      }
+      try {
+        val messages =
+          JSONArray().apply {
+            put(
+              JSONObject().apply {
+                put("role", "user")
+                put("content", "ping")
+              }
+            )
+          }
+
+        val jsonBody =
+          JSONObject().apply {
+            if (model.isNotBlank()) {
+              put("model", model)
+            }
+            put("messages", messages)
+            put("max_tokens", 10)
+          }
+
+        val request =
+          Request.Builder()
+            .url(baseUrl.ifBlank { "https://openrouter.ai/api/v1/chat/completions" })
+            .apply {
+              if (apiKey.isNotBlank()) {
+                addHeader("Authorization", "Bearer ${apiKey.trim()}")
+              }
+            }
+            .addHeader("Content-Type", "application/json")
+            .addHeader("HTTP-Referer", "https://github.com/EchoMusicApp/Echo-Music")
+            .addHeader("X-Title", "echomusic")
+            .post(jsonBody.toString().toRequestBody(JSON))
+            .build()
+
+        val response = client.newCall(request).execute()
+        val responseBody = response.body?.string() ?: ""
+
+        if (!response.isSuccessful) {
+          val errorMsg =
+            try {
+              val json = JSONObject(responseBody)
+              json.optJSONObject("error")?.optString("message")
+                ?: if (json.has("message")) json.getString("message")
+                else "HTTP ${response.code}: ${response.message}"
+            } catch (e: Exception) {
+              "HTTP ${response.code}: ${response.message}"
+            }
+          Result.failure(Exception(errorMsg))
+        } else {
+          val reply =
+            try {
+              val choices = JSONObject(responseBody).optJSONArray("choices")
+              val text = choices?.optJSONObject(0)?.optJSONObject("message")?.optString("content")?.trim()
+              if (!text.isNullOrBlank()) text else "Connection OK"
+            } catch (e: Exception) {
+              "Connection OK"
+            }
+          Result.success(reply)
+        }
+      } catch (e: Exception) {
+        Result.failure(e)
+      }
+    }
 }
+

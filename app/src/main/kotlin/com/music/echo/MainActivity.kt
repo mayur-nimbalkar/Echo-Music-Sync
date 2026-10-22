@@ -212,7 +212,17 @@ import echo.music.iad1tya.ui.utils.appBarScrollBehavior
 import echo.music.iad1tya.ui.utils.resetHeightOffset
 import echo.music.iad1tya.utils.SyncUtils
 import echo.music.iad1tya.utils.dataStore
+import echo.music.iad1tya.ai.AiRecommendationHelper
+import echo.music.iad1tya.constants.AiRecommendationsKey
+import echo.music.iad1tya.constants.LastAiRecommendationUpdateDayKey
+import echo.music.iad1tya.constants.CreateFromTasteDailyKey
+import echo.music.iad1tya.constants.LastCreateFromTasteUpdateDayKey
+import androidx.datastore.preferences.core.edit
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.map
 import echo.music.iad1tya.utils.get
+import echo.music.iad1tya.utils.onlinePlaylistRoute
+import echo.music.iad1tya.utils.validOnlinePlaylistId
 import echo.music.iad1tya.utils.rememberEnumPreference
 import echo.music.iad1tya.utils.rememberPreference
 import echo.music.iad1tya.utils.reportException
@@ -258,6 +268,7 @@ class MainActivity : ComponentActivity() {
   }
 
   @Inject lateinit var database: MusicDatabase
+  @Inject lateinit var localTasteEngine: echo.music.iad1tya.generate.LocalTasteEngine
 
   @Inject lateinit var downloadUtil: DownloadUtil
 
@@ -407,6 +418,16 @@ class MainActivity : ComponentActivity() {
     }
 
     lifecycleScope.launch {
+      val aiRecommendationsEnabled = dataStore.data.map { it[AiRecommendationsKey] ?: false }.first()
+      if (aiRecommendationsEnabled) {
+        val lastUpdate = dataStore.data.map { it[LastAiRecommendationUpdateDayKey] ?: 0L }.first()
+        val currentDay = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
+        if (lastUpdate != currentDay) {
+          dataStore.edit { it[LastAiRecommendationUpdateDayKey] = currentDay }
+          AiRecommendationHelper.generateRecommendations(this@MainActivity)
+        }
+      }
+
       dataStore.data
         .map {
           (try {
@@ -429,6 +450,16 @@ class MainActivity : ComponentActivity() {
     }
 
     lifecycleScope.launch {
+      val aiRecommendationsEnabled = dataStore.data.map { it[AiRecommendationsKey] ?: false }.first()
+      if (aiRecommendationsEnabled) {
+        val lastUpdate = dataStore.data.map { it[LastAiRecommendationUpdateDayKey] ?: 0L }.first()
+        val currentDay = System.currentTimeMillis() / (1000 * 60 * 60 * 24)
+        if (lastUpdate != currentDay) {
+          dataStore.edit { it[LastAiRecommendationUpdateDayKey] = currentDay }
+          AiRecommendationHelper.generateRecommendations(this@MainActivity)
+        }
+      }
+
       dataStore.data
         .map {
           (try {
@@ -855,12 +886,14 @@ class MainActivity : ComponentActivity() {
               currentRoute!!.startsWith("album/") ||
               currentRoute!!.startsWith("online_playlist/") ||
               currentRoute!!.startsWith("local_playlist/") ||
+              currentRoute!!.startsWith("spotify_playlist/") ||
               currentRoute!!.startsWith("artist/")
           }
 
         val isLandscape = configuration.containerDpSize.width > configuration.containerDpSize.height
 
-        val showRail = isLandscape && !inSearchScreen && currentRoute != "ambient_mode"
+        val showRail =
+          isLandscape && !inSearchScreen && currentRoute != "ambient_mode" && currentRoute != "music_flow"
 
         val navPadding =
           if (shouldShowNavigationBar && !showRail) {
@@ -1222,6 +1255,7 @@ class MainActivity : ComponentActivity() {
             }
           }
 
+        val expandPlayer = remember(playerBottomSheetState) { { playerBottomSheetState.expandSoft() } }
         CompositionLocalProvider(
           LocalHapticFeedback provides customHapticFeedback,
           LocalGlassEffectConfig provides glassEffectConfig,
@@ -1236,6 +1270,7 @@ class MainActivity : ComponentActivity() {
           LocalShimmerTheme provides getShimmerTheme(),
           LocalSyncUtils provides syncUtils,
           LocalListenTogetherManager provides listenTogetherManager,
+          LocalExpandPlayer provides expandPlayer,
         ) {
           Scaffold(
             snackbarHost = { SnackbarHost(snackbarHostState) },
@@ -1356,6 +1391,7 @@ class MainActivity : ComponentActivity() {
                   currentRoute != "update" &&
                   currentRoute != "listen_together/chat" &&
                   currentRoute != "ambient_mode" &&
+                  currentRoute != "music_flow" &&
                   currentRoute != "uptime" &&
                   currentRoute?.startsWith("settings") != true
               ) {
@@ -1439,7 +1475,7 @@ class MainActivity : ComponentActivity() {
                         onAiHubClick = {
                           navController.navigate("settings/ai") { launchSingleTop = true }
                         },
-                        aiHubIconRes = R.drawable.sparks,
+                        aiHubIconRes = R.drawable.ai_pfp,
                         aiHubContentDescription = stringResource(R.string.ai_lyrics_translation),
                         onSearchLongClick = onRailSearchLongClick,
                         isSelected = { screen ->
@@ -1468,6 +1504,8 @@ class MainActivity : ComponentActivity() {
                             alpha =
                               if (
                                 progress > 0f ||
+                                  useFloatingNavBar ||
+                                  !shouldShowNavigationBar ||
                                   (useNewMiniPlayerDesign && !shouldShowNavigationBar)
                               )
                                 0f
@@ -1482,6 +1520,7 @@ class MainActivity : ComponentActivity() {
                   currentRoute != "update" &&
                     currentRoute != "listen_together/chat" &&
                     currentRoute != "ambient_mode" &&
+                    currentRoute != "music_flow" &&
                     currentRoute != "uptime" &&
                     currentRoute?.startsWith("settings") != true
                 ) {
@@ -1506,7 +1545,12 @@ class MainActivity : ComponentActivity() {
                       .graphicsLayer {
                         val progress = playerBottomSheetState.progress
                         alpha =
-                          if (progress > 0f || (useNewMiniPlayerDesign && !shouldShowNavigationBar))
+                          if (
+                            progress > 0f ||
+                              useFloatingNavBar ||
+                              !shouldShowNavigationBar ||
+                              (useNewMiniPlayerDesign && !shouldShowNavigationBar)
+                          )
                             0f
                           else 1f
                       }
@@ -1569,7 +1613,7 @@ class MainActivity : ComponentActivity() {
                   onAiHubClick = {
                     navController.navigate("settings/ai") { launchSingleTop = true }
                   },
-                  aiHubIconRes = R.drawable.sparks,
+                  aiHubIconRes = R.drawable.ai_pfp,
                   aiHubContentDescription = stringResource(R.string.ai_lyrics_translation)
                 )
               }
@@ -1859,8 +1903,16 @@ class MainActivity : ComponentActivity() {
     }
 
     when (val path = uri.pathSegments.firstOrNull()) {
-      "playlist" ->
-        uri.getQueryParameter("list")?.let { playlistId ->
+      "playlist" -> {
+        val playlistId = validOnlinePlaylistId(uri.getQueryParameter("list"))
+        if (playlistId == null) {
+          android.widget.Toast.makeText(
+              this,
+              R.string.invalid_playlist_url,
+              android.widget.Toast.LENGTH_SHORT
+            )
+            .show()
+        } else {
           if (playlistId.startsWith("OLAK5uy_")) {
             coroutineScope.launch(Dispatchers.IO) {
               YouTube.albumSongs(playlistId)
@@ -1872,9 +1924,10 @@ class MainActivity : ComponentActivity() {
                 .onFailure { reportException(it) }
             }
           } else {
-            navController.navigate("online_playlist/$playlistId")
+            onlinePlaylistRoute(playlistId)?.let { navController.navigate(it) }
           }
         }
+      }
       "browse" -> uri.lastPathSegment?.let { browseId -> navController.navigate("album/$browseId") }
       "channel",
       "c" -> uri.lastPathSegment?.let { artistId -> navController.navigate("artist/$artistId") }
@@ -1994,3 +2047,4 @@ val LocalSyncUtils = staticCompositionLocalOf<SyncUtils> { error("No SyncUtils p
 val LocalListenTogetherManager =
   staticCompositionLocalOf<echo.music.iad1tya.listentogether.ListenTogetherManager?> { null }
 val LocalIsPlayerExpanded = compositionLocalOf { false }
+val LocalExpandPlayer = staticCompositionLocalOf<() -> Unit> { {} }

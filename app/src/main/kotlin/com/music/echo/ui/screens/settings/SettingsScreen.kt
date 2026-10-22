@@ -206,6 +206,22 @@ fun SettingsScreen(
           )
         )
       }
+      val musicFlowText = stringResource(R.string.music_flow)
+      val musicFlowDesc = stringResource(R.string.music_flow_settings_description)
+      if (
+        musicFlowText.lowercase().contains(searchLower) ||
+          musicFlowDesc.lowercase().contains(searchLower)
+      ) {
+        add(
+          Material3SettingsItem(
+            isHighlighted = (highlightKey == musicFlowText),
+            icon = painterResource(R.drawable.swipe),
+            title = { Text(musicFlowText) },
+            description = { Text(musicFlowDesc) },
+            onClick = { navController.navigate("settings/music_flow") }
+          )
+        )
+      }
       if (
         listenTogetherText.lowercase().contains(searchLower) ||
           listenTogetherDesc.lowercase().contains(searchLower)
@@ -234,6 +250,8 @@ fun SettingsScreen(
           )
         )
       }
+
+
 
       if (
         privacyText.lowercase().contains(searchLower) ||
@@ -362,7 +380,7 @@ fun SettingsScreen(
                   }
                 },
                 onClick = {
-                  val encodedTitle = android.net.Uri.encode(setting.title)
+                  val encodedTitle = Uri.encode(setting.title)
                   val finalRoute =
                     if (setting.route.contains("?")) "${setting.route}&highlightKey=$encodedTitle"
                     else "${setting.route}?highlightKey=$encodedTitle"
@@ -394,9 +412,9 @@ fun SettingsScreen(
       // Let's just create groups manually using itemsList which preserves order
       val accountGroup = itemsList.take(2) // Account, AI
       val listeningSummaryGroup = itemsList.drop(2).take(1) // Listening Summary
-      val playerGroup = itemsList.drop(3).take(3) // Appearance, Player, Listen Together
-      val dataGroup = itemsList.drop(6).take(4) // Content, Privacy, Storage, Backup
-      val systemGroup = itemsList.drop(10) // Update, Links, About
+      val playerGroup = itemsList.drop(3).take(4) // Appearance, Player, Music Flow, Listen Together
+      val dataGroup = itemsList.drop(7).take(4) // Content, Privacy, Storage, Backup
+      val systemGroup = itemsList.drop(11) // Update, Links, About
 
       if (accountGroup.isNotEmpty()) {
         Material3SettingsGroup(scrollState = scrollState, items = accountGroup)

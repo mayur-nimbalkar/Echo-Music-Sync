@@ -11,7 +11,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Debug and Stable APKs
+    name: Build Debug APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -26,6 +26,11 @@ jobs:
         java-version: '21'
         distribution: 'temurin'
         cache: gradle
+
+    - name: Setup Android NDK
+      run: |
+        yes | $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --licenses || true
+        $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager --install "ndk;28.2.13676358" || true
 
     - name: Prepare signing keystore
       env:
@@ -64,33 +69,21 @@ jobs:
           echo "STORE_PASSWORD=$STORE_PASSWORD"
         } >> "$GITHUB_ENV"
 
-    # Both flavors are published for now, so the universal APK stays available as a
-    # fallback: it bundles the yt-dlp/FFmpeg native payload for all four ABIs (~270 MB),
-    # while arm64-v8a is the ABI every current Android phone uses and lands around 100 MB.
-    #
-    # Four variants are compiled in this job, and the Kotlin daemon accumulates garbage
-    # across compilations: at the checked-in 3g heap the release compile dies with
-    # "GC overhead limit exceeded". Give it more room (-P overrides gradle.properties) and
-    # start the second build type from a clean daemon.
-    - name: Build Debug APKs (arm64 + universal)
-      run: |
-        chmod +x gradlew
-        ./gradlew assembleArm64FossDebug assembleUniversalFossDebug \
-          -Pkotlin.daemon.jvmargs=-Xmx6g
-
     # The unit tests were never run by CI, which is how two real parser bugs (duplicate
     # query candidates, and "Mr." being mistaken for an Instagram handle) shipped
     # unnoticed in earlier releases. They are fast and pure-JVM.
     - name: Run unit tests
       run: |
-        ./gradlew testArm64FossDebugUnitTest \
+        chmod +x gradlew
+        ./gradlew :core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64FossDebugUnitTest \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
-    - name: Build Stable APKs (arm64 + universal)
+    # Only debug APKs are published. The universal APK stays available as a fallback: it
+    # bundles the yt-dlp/FFmpeg native payload for all four ABIs (~300 MB), while
+    # arm64-v8a is the ABI every current Android phone uses and lands around 140 MB.
+    - name: Build Debug APKs (arm64 + universal)
       run: |
-        ./gradlew --stop || true
-        pkill -f KotlinCompileDaemon || true
-        ./gradlew assembleArm64GmsRelease assembleUniversalGmsRelease \
+        ./gradlew assembleArm64FossDebug assembleUniversalFossDebug \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
     - name: Upload arm64 Debug APK
@@ -105,20 +98,6 @@ jobs:
       with:
         name: Echo-Music-universal-Debug-APK
         path: app/build/outputs/apk/**/app-universal-foss-debug.apk
-        if-no-files-found: error
-
-    - name: Upload arm64 Stable APK
-      uses: actions/upload-artifact@v7
-      with:
-        name: Echo-Music-arm64-Stable-APK
-        path: app/build/outputs/apk/**/app-arm64-gms-release.apk
-        if-no-files-found: error
-
-    - name: Upload universal Stable APK
-      uses: actions/upload-artifact@v7
-      with:
-        name: Echo-Music-universal-Stable-APK
-        path: app/build/outputs/apk/**/app-universal-gms-release.apk
         if-no-files-found: error
 
     - name: Require permanent signing
