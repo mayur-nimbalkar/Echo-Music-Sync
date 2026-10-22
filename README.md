@@ -19,6 +19,10 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 
 ---
 
+[![Sponsor](https://readme.cash/i/qx6lmx2nwz.svg)](https://readme.cash/c/qx6lmx2nwz)
+
+---
+
 ## Table of Contents
 
 - [Overview](#overview)
@@ -72,14 +76,7 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 
 ### What's New
 
-> - **Data Saver Mode (Beta)** — Automatically reduces data usage during playback for limited connections.
-> - **Settings Search Index** — Quickly find and navigate to any settings option instantly.
-> - **Redesigned UI** — Cleaner, faster, and more intuitive interface from the ground up.
-> - **Import & Sync from Spotify** — Bring your playlists over with ease and keep them up-to-date with one-tap Fast Sync.
-> - **Listen Together** — Sync music in real time, similar to Spotify Jam.
-> - **Podcast Support** — Listen to podcasts alongside your music library.
-> - **Local Media Support** — Play music files stored directly on your device.
-> - **Dynamic Island Support** — Enhanced playback notifications on supported Android devices.
+> **Music DNA (New!)** — Instantly uncover the backstory of any track. Echo Music queries Genius for deep track annotations, and intelligently falls back to Wikipedia API extracts for regional or obscure tracks where crowd-sourced meanings are missing.
 
 <br>
 
@@ -102,7 +99,7 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 <br>
 
 - **Echo Find** — Identify songs playing around you using advanced audio recognition.
-- **Echo Brain** — An intelligent, on-device engine that analyzes your listening momentum and auto-injects perfectly aligned tracks into your queue. Read more in the [Echo Brain Documentation](ECHO_BRAIN_DOCS.md).
+- **Echo Brain** — An intelligent, on-device engine that analyzes your listening momentum and auto-injects perfectly aligned tracks into your queue.
 - **Smart Recommendations** — Personalized suggestions based on your listening history.
 - **Comprehensive Browsing** — Explore Charts, Podcasts, Moods, and Genres.
 
@@ -116,6 +113,8 @@ Echo Music delivers a seamless, premium listening experience by leveraging YouTu
 - **Word-by-Word Lyrics** — Precise per-word synchronization.
 - **Lyrics+** — New lyrics provider for improved accuracy and coverage.
 - **AI Translation** — Built-in Google Translate integration for lyrics in any language.
+
+  For AI lyrics translation, select **API Route** in the AI settings, enter your [API key](https://www.api-route.com/api-keys), and choose a model available to that key. The preset uses `https://global.api-route.com/v1/chat/completions` with `claude-fable-5-1`; you can enter another exact model ID from the authenticated `/v1/models` catalog using the custom model option. Model availability depends on your key's group and permissions. See the [quickstart](https://www.api-route.com/docs/quickstart).
 
 </details>
 
@@ -166,7 +165,7 @@ Download the latest pre-compiled APK from the [Releases Page](https://github.com
 1. **Clone the Repository**
 
    ```bash
-   git clone https://github.com/iad1tya/Echo-Music.git
+   git clone https://github.com/EchoMusicApp/Echo-Music.git
    cd Echo-Music
    ```
 
@@ -183,16 +182,10 @@ Download the latest pre-compiled APK from the [Releases Page](https://github.com
    Firebase is required for analytics and crash reporting. See the instructions in [SETUP.md](SETUP.md#3-configure-firebase-optional) for adding your `google-services.json`.
 
 4. **Build the Application**
-   Echo Music has two build variants: **FOSS** (without Google Play Services / Cast) and **GMS** (with Cast support).
-
-   - To build the **FOSS** Universal Debug variant:
-     ```bash
-     ./gradlew assembleUniversalFossDebug
-     ```
-   - To build the **GMS** Universal Debug variant:
-     ```bash
-     ./gradlew assembleUniversalGmsDebug
-     ```
+   To build the Universal Debug variant:
+   ```bash
+   ./gradlew assembleUniversalGmsDebug
+   ```
 
    _(For optimized ARM64 builds, release builds, or other options, refer to [SETUP.md](SETUP.md))_
 
@@ -242,7 +235,9 @@ Without the support of this incredible open-source community, none of this would
 
 <!-- readme: contributors -start -->
 <table>
-<tr><td align="center"><a href="https://github.com/iad1tya"><img src="https://avatars.githubusercontent.com/u/147871321?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/mdakashhossain1"><img src="https://avatars.githubusercontent.com/u/85729564?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/Rajendra0309"><img src="https://avatars.githubusercontent.com/u/103703747?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/soumya-99"><img src="https://avatars.githubusercontent.com/u/59480692?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/kaunkrishna"><img src="https://avatars.githubusercontent.com/u/270065466?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/VardhmanSurana"><img src="https://avatars.githubusercontent.com/u/100058534?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/andrewvalletta"><img src="https://avatars.githubusercontent.com/u/137303110?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/mayur-nimbalkar"><img src="https://avatars.githubusercontent.com/u/245671983?v=4" width="60" height="60" /></a></td></tr>
+<tr><td align="center"><a href="https://github.com/iad1tya"><img src="https://avatars.githubusercontent.com/u/147871321?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/mdakashhossain1"><img src="https://avatars.githubusercontent.com/u/85729564?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/Roshan-aa11"><img src="https://avatars.githubusercontent.com/u/192568043?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/gerry02"><img src="https://avatars.githubusercontent.com/u/33490327?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/VardhmanSurana"><img src="https://avatars.githubusercontent.com/u/100058534?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/Rajendra0309"><img src="https://avatars.githubusercontent.com/u/103703747?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/pranav6004"><img src="https://avatars.githubusercontent.com/u/156088278?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/Mickael81"><img src="https://avatars.githubusercontent.com/u/184148670?v=4" width="60" height="60" /></a></td></tr>
+<tr><td align="center"><a href="https://github.com/soumya-99"><img src="https://avatars.githubusercontent.com/u/59480692?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/kaunkrishna"><img src="https://avatars.githubusercontent.com/u/270065466?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/Berserkr2k"><img src="https://avatars.githubusercontent.com/u/127702589?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/andrewvalletta"><img src="https://avatars.githubusercontent.com/u/137303110?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/bivekk51"><img src="https://avatars.githubusercontent.com/u/115235822?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/DennyHo0917"><img src="https://avatars.githubusercontent.com/u/149746199?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/Felixkw12"><img src="https://avatars.githubusercontent.com/u/151852644?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/pranavxdevops"><img src="https://avatars.githubusercontent.com/u/110167539?v=4" width="60" height="60" /></a></td></tr>
+<tr><td align="center"><a href="https://github.com/TanvirSdq"><img src="https://avatars.githubusercontent.com/u/112406045?v=4" width="60" height="60" /></a></td><td align="center"><a href="https://github.com/Thibaultjaigu"><img src="https://avatars.githubusercontent.com/u/84420566?v=4" width="60" height="60" /></a></td></tr>
 </table>
 <!-- readme: contributors -end -->
 

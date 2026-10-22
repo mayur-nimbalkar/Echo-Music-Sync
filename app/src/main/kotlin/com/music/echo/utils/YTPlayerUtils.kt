@@ -231,10 +231,11 @@ object YTPlayerUtils {
     audioQuality: AudioQuality,
     connectivityManager: ConnectivityManager,
   ): Result<PlaybackData> = runCatching {
+    val targetMaxKbps = audioQuality.maxKbps.coerceAtMost(160)
     val extracted =
       echo.music.iad1tya.utils.InnerTubeXResolver.extract(
         videoId = videoId,
-        maxKbps = 160,
+        maxKbps = targetMaxKbps,
         requireM4a = false
       ) ?: throw Exception("No stream found via InnerTubeXResolver")
 

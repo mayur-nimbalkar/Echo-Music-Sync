@@ -14,7 +14,7 @@ This document provides instructions for setting up the Echo Music project for de
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/iad1tya/Echo-Music.git
+git clone https://github.com/EchoMusicApp/Echo-Music.git
 cd Echo-Music
 ```
 
@@ -74,17 +74,13 @@ KEY_PASSWORD=your_key_password
 
 Open the project in Android Studio or build from the command line.
 
-Echo Music has two build variants: **FOSS** (without Google Play Services / Cast) and **GMS** (with Cast support).
+Echo Music builds as a **GMS** variant with Cast and Firebase support.
 
 ```bash
-# FOSS Debug build
-./gradlew assembleUniversalFossDebug
-
-# GMS Debug build
+# Debug build
 ./gradlew assembleUniversalGmsDebug
 
-# Release builds (requires signing configuration)
-./gradlew assembleUniversalFossRelease
+# Release build (requires signing configuration)
 ./gradlew assembleUniversalGmsRelease
 ```
 

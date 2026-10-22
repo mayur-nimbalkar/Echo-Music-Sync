@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -23,6 +24,7 @@ import androidx.compose.material3.TopAppBarScrollBehavior
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
@@ -33,6 +35,9 @@ import androidx.compose.ui.unit.dp
 import androidx.navigation.NavController
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.R
+import echo.music.iad1tya.api.DeepLService
+import echo.music.iad1tya.api.OpenRouterService
+import kotlinx.coroutines.launch
 import echo.music.iad1tya.constants.AiProviderKey
 import echo.music.iad1tya.constants.AiRecommendationsKey
 import echo.music.iad1tya.constants.AutoTranslateKey
@@ -70,13 +75,23 @@ fun AiSettings(
   var translateMode by rememberPreference(TranslateModeKey, "Literal")
   var autoTranslate by rememberPreference(AutoTranslateKey, false)
   var aiRecommendations by rememberPreference(AiRecommendationsKey, false)
+  var createFromTasteDaily by rememberPreference(echo.music.iad1tya.constants.CreateFromTasteDailyKey, false)
   var deeplApiKey by rememberPreference(DeeplApiKey, "")
   var deeplFormality by rememberPreference(DeeplFormalityKey, "default")
+
+  val coroutineScope = rememberCoroutineScope()
+  var isTesting by rememberSaveable { mutableStateOf(false) }
+  var testStatusMessage by rememberSaveable { mutableStateOf<String?>(null) }
+  var testIsSuccess by rememberSaveable { mutableStateOf(false) }
+  var showTestDialog by rememberSaveable { mutableStateOf(false) }
+  var testDialogTitle by rememberSaveable { mutableStateOf("") }
+  var testDialogMessage by rememberSaveable { mutableStateOf("") }
 
   val aiProviders =
     mapOf(
       "OpenRouter" to "https://openrouter.ai/api/v1/chat/completions",
       "OpenAI" to "https://api.openai.com/v1/chat/completions",
+      "API Route" to "https://global.api-route.com/v1/chat/completions",
       "Perplexity" to "https://api.perplexity.ai/chat/completions",
       "Claude" to "https://api.anthropic.com/v1/messages",
       "Gemini" to "https://generativelanguage.googleapis.com/v1beta/openai/chat/completions",
@@ -85,6 +100,7 @@ fun AiSettings(
       "Nvidia" to "https://integrate.api.nvidia.com/v1/chat/completions",
       "OrcaRouter" to "https://api.orcarouter.ai/v1/chat/completions",
       "Groq" to "https://api.groq.com/openai/v1/chat/completions",
+      "Opper" to "https://api.opper.ai/v3/compat/chat/completions",
       "Puter" to "https://api.puter.com/puterai/openai/v1/chat/completions",
       "DeepL" to "https://api.deepl.com/v2/translate",
       "Custom" to ""
@@ -94,6 +110,7 @@ fun AiSettings(
     mapOf(
       "OpenRouter" to stringResource(R.string.ai_provider_openrouter_help),
       "OpenAI" to stringResource(R.string.ai_provider_openai_help),
+      "API Route" to stringResource(R.string.ai_provider_api_route_help),
       "Perplexity" to stringResource(R.string.ai_provider_perplexity_help),
       "Claude" to stringResource(R.string.ai_provider_claude_help),
       "Gemini" to stringResource(R.string.ai_provider_gemini_help),
@@ -102,6 +119,7 @@ fun AiSettings(
       "Nvidia" to stringResource(R.string.ai_provider_nvidia_help),
       "OrcaRouter" to stringResource(R.string.ai_provider_orcarouter_help),
       "Groq" to stringResource(R.string.ai_provider_groq_help),
+      "Opper" to stringResource(R.string.ai_provider_opper_help),
       "Puter" to stringResource(R.string.ai_provider_puter_help),
       "DeepL" to stringResource(R.string.ai_provider_deepl_help),
       "Custom" to ""
@@ -119,6 +137,7 @@ fun AiSettings(
           "google/gemini-3-flash-preview"
         ),
       "OpenAI" to listOf("gpt-4o-mini", "gpt-4o", "gpt-4-turbo"),
+      "API Route" to listOf("claude-fable-5-1"),
       "Claude" to
         listOf("claude-3-5-haiku-latest", "claude-3-5-sonnet-latest", "claude-3-opus-latest"),
       "Gemini" to
@@ -167,6 +186,14 @@ fun AiSettings(
           "qwen/qwen3-32b",
           "gemma2-9b-it"
         ),
+      "Opper" to
+        listOf(
+          "gpt-5.4-mini",
+          "claude-sonnet-4-6",
+          "gemini-3.8-flash",
+          "deepseek-v4-pro",
+          "mistral-large-2512"
+        ),
       "Puter" to
         listOf(
           "gpt-4o-mini",
@@ -185,6 +212,9 @@ fun AiSettings(
   var showTranslateModeHelpDialog by rememberSaveable { mutableStateOf(false) }
   var showApiHelpDialog by rememberSaveable { mutableStateOf(false) }
   var showRefreshDialog by rememberSaveable { mutableStateOf(false) }
+  var showTasteGenerationDialog by rememberSaveable { mutableStateOf(false) }
+  var showLogsDialog by rememberSaveable { mutableStateOf(false) }
+
   var showLanguageDialog by rememberSaveable { mutableStateOf(false) }
   var showApiKeyDialog by rememberSaveable { mutableStateOf(false) }
   var showDeeplApiKeyDialog by rememberSaveable { mutableStateOf(false) }
@@ -262,17 +292,17 @@ fun AiSettings(
         aiProvider = it
         if (it != "Custom" && it != "DeepL") {
           openRouterBaseUrl = aiProviders[it] ?: ""
-        } else {
-          openRouterBaseUrl = ""
         }
 
         val modelsForProvider = modelsByProvider[it] ?: listOf()
-        openRouterModel =
-          if (modelsForProvider.isNotEmpty()) {
-            modelsForProvider[0]
-          } else {
-            ""
-          }
+        if (it != "Custom") {
+          openRouterModel =
+            if (modelsForProvider.isNotEmpty()) {
+              modelsForProvider[0]
+            } else {
+              ""
+            }
+        }
         showProviderDialog = false
       },
       title = stringResource(R.string.ai_provider),
@@ -397,7 +427,25 @@ fun AiSettings(
       icon = { Icon(painterResource(R.drawable.link), null) },
       initialTextFieldValue = TextFieldValue(text = openRouterBaseUrl),
       onDone = {
-        openRouterBaseUrl = it
+        var url = it.trim()
+        if (url.isNotBlank()) {
+          if (!url.startsWith("http://") && !url.startsWith("https://")) {
+            url = "https://$url"
+          }
+          if (!OpenRouterService.isUrlSafe(url)) {
+            android.widget.Toast.makeText(context, "Invalid or restricted endpoint destination", android.widget.Toast.LENGTH_SHORT).show()
+            return@TextFieldDialog
+          }
+          if (!url.endsWith("/chat/completions") && !url.endsWith("/messages")) {
+            url = when {
+              url.endsWith("/v1") -> "$url/chat/completions"
+              url.endsWith("/v1/") -> "${url}chat/completions"
+              url.endsWith("/") -> "${url}chat/completions"
+              else -> "$url/chat/completions"
+            }
+          }
+        }
+        openRouterBaseUrl = url
         showBaseUrlDialog = false
       },
       onDismiss = { showBaseUrlDialog = false }
@@ -434,6 +482,38 @@ fun AiSettings(
       },
       onDismiss = { showCustomModelInput = false }
     )
+  }
+
+  if (showTestDialog) {
+    echo.music.iad1tya.ui.component.DefaultDialog(
+      onDismiss = { showTestDialog = false },
+      icon = {
+        Icon(
+          painter = painterResource(if (testIsSuccess) R.drawable.check else R.drawable.close),
+          contentDescription = null,
+          tint = if (testIsSuccess) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.error
+        )
+      },
+      title = { 
+        Text(
+          text = testDialogTitle, 
+          style = MaterialTheme.typography.headlineSmall, 
+          textAlign = androidx.compose.ui.text.style.TextAlign.Center
+        ) 
+      },
+      buttons = {
+        TextButton(onClick = { showTestDialog = false }) {
+          Text(stringResource(android.R.string.ok))
+        }
+      }
+    ) {
+      Text(
+        text = testDialogMessage,
+        style = MaterialTheme.typography.bodyMedium,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+        textAlign = androidx.compose.ui.text.style.TextAlign.Center
+      )
+    }
   }
 
   Column(
@@ -578,7 +658,7 @@ fun AiSettings(
                   } else null
               )
             )
-            if (aiProvider != "Custom") {
+            if (aiProvider != "DeepL") {
               add(
                 Material3SettingsItem(
                   isHighlighted = (highlightKey == stringResource(R.string.ai_model)),
@@ -587,11 +667,122 @@ fun AiSettings(
                   description = {
                     Text(openRouterModel.ifBlank { stringResource(R.string.not_set) })
                   },
-                  onClick = { showModelDialog = true }
+                  onClick = {
+                    if (aiProvider == "Custom" || commonModels.isEmpty()) {
+                      showCustomModelInput = true
+                    } else {
+                      showModelDialog = true
+                    }
+                  }
                 )
               )
             }
           }
+          add(
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.network_node),
+              title = { Text("Test Connection") },
+              description = {
+                Text(
+                  when {
+                    isTesting -> "Testing connection..."
+                    testStatusMessage != null -> testStatusMessage!!
+                    else -> "Verify your provider, model, and API key"
+                  },
+                  color =
+                    when {
+                      testStatusMessage != null && testIsSuccess -> MaterialTheme.colorScheme.primary
+                      testStatusMessage != null && !testIsSuccess -> MaterialTheme.colorScheme.error
+                      else -> MaterialTheme.colorScheme.onSurfaceVariant
+                    }
+                )
+              },
+              trailingContent =
+                if (isTesting) {
+                  {
+                    CircularProgressIndicator(
+                      modifier = Modifier.size(20.dp),
+                      strokeWidth = 2.dp
+                    )
+                  }
+                } else null,
+              onClick = {
+                if (!isTesting) {
+                  isTesting = true
+                  testStatusMessage = "Testing..."
+                  coroutineScope.launch {
+                    try {
+                      if (aiProvider == "DeepL") {
+                        if (deeplApiKey.isBlank()) {
+                          isTesting = false
+                          testIsSuccess = false
+                          testStatusMessage = "API Key missing"
+                          testDialogTitle = "DeepL Test Failed"
+                          testDialogMessage = "Please enter your DeepL API key before testing."
+                          showTestDialog = true
+                          return@launch
+                        }
+                        val res = DeepLService.testConnection(deeplApiKey)
+                        isTesting = false
+                        if (res.isSuccess) {
+                          testIsSuccess = true
+                          testStatusMessage = "Connected successfully!"
+                        } else {
+                          testIsSuccess = false
+                          testStatusMessage = "Connection failed"
+                          testDialogTitle = "DeepL Test Failed"
+                          testDialogMessage = res.exceptionOrNull()?.message ?: "Unknown DeepL error"
+                          showTestDialog = true
+                        }
+                      } else {
+                        if (openRouterApiKey.isBlank() && aiProvider != "Custom") {
+                          isTesting = false
+                          testIsSuccess = false
+                          testStatusMessage = "API Key missing"
+                          testDialogTitle = "Test Failed"
+                          testDialogMessage = "Please enter your $aiProvider API key before testing."
+                          showTestDialog = true
+                          return@launch
+                        }
+                        val targetUrl =
+                          if (aiProvider == "Custom") {
+                            openRouterBaseUrl.ifBlank { "https://openrouter.ai/api/v1/chat/completions" }
+                          } else {
+                            aiProviders[aiProvider]?.ifBlank { "https://openrouter.ai/api/v1/chat/completions" }
+                              ?: "https://openrouter.ai/api/v1/chat/completions"
+                          }
+                        val res =
+                          OpenRouterService.testConnection(
+                            baseUrl = targetUrl,
+                            apiKey = openRouterApiKey,
+                            model = openRouterModel
+                          )
+                        isTesting = false
+                        if (res.isSuccess) {
+                          testIsSuccess = true
+                          testStatusMessage = "Connected successfully!"
+                        } else {
+                          testIsSuccess = false
+                          testStatusMessage = "Connection failed"
+                          testDialogTitle = "Connection Failed"
+                          testDialogMessage =
+                            "Failed to connect to $aiProvider ($targetUrl):\n\n${res.exceptionOrNull()?.message}"
+                          showTestDialog = true
+                        }
+                      }
+                    } catch (e: Exception) {
+                      isTesting = false
+                      testIsSuccess = false
+                      testStatusMessage = "Error"
+                      testDialogTitle = "Error"
+                      testDialogMessage = e.localizedMessage ?: e.message ?: "Unexpected error"
+                      showTestDialog = true
+                    }
+                  }
+                }
+              }
+            )
+          )
         }
     )
 
@@ -623,7 +814,9 @@ fun AiSettings(
           add(
             Material3SettingsItem(
               isHighlighted = (highlightKey == stringResource(R.string.ai_recommendations)),
-              icon = painterResource(R.drawable.sparks),
+              icon = painterResource(R.drawable.ai_pfp),
+              tintIcon = false,
+              iconShape = androidx.compose.foundation.shape.CircleShape,
               title = { Text(stringResource(R.string.ai_recommendations)) },
               description = { Text(stringResource(R.string.ai_recommendations_desc)) },
               trailingContent = {
@@ -632,12 +825,32 @@ fun AiSettings(
               onClick = { aiRecommendations = !aiRecommendations }
             )
           )
+          add(
+            Material3SettingsItem(
+              icon = painterResource(R.drawable.tast),
+              tintIcon = false,
+              iconShape = androidx.compose.foundation.shape.CircleShape,
+              title = { Text("Create from Taste") },
+              description = { Text("Daily update of a playlist from your taste history") },
+              trailingContent = {
+                Switch(checked = createFromTasteDaily, onCheckedChange = { createFromTasteDaily = it })
+              },
+              onClick = { createFromTasteDaily = !createFromTasteDaily }
+            )
+          )
         }
     )
 
     if (showRefreshDialog) {
       echo.music.iad1tya.ui.component.RefreshAiRecommendationDialog(
         onDismiss = { showRefreshDialog = false }
+      )
+    }
+
+    if (showTasteGenerationDialog) {
+      echo.music.iad1tya.ui.component.CreateFromTasteDialog(
+        onDismiss = { showTasteGenerationDialog = false },
+        onPlaylistCreated = { showTasteGenerationDialog = false }
       )
     }
 

@@ -1,5 +1,10 @@
 {
   "features": [
+    "Local Taste Engine: Offline, account-free algorithmic recommendation engine with skip tracking and taste mix generation",
+    "Local Taste Engine (Slice 2): Multi-source Last.fm recommendation pipeline (similar tracks, similar artists, top genres) with 1-hour taste snapshot caching and additive scoring bonuses",
+    "Local Taste Engine (Slice 3): Genre awareness with additive scoring bonus (+1.0), YouTube taste signals extraction, cross-screen generation status synchronization, and 'From Taste' quick action",
+    "Music Flow: optional full-screen vertical swipe discovery (Home shortcut) that plays personalized songs through the existing player, with like/playlist/share/lyrics actions, Not interested / Less like this feedback, Restore previous queue, offline downloaded-song fallback and settings under Settings → Music Flow",
+    "Android Auto: optional autoplay of the restored queue on automotive connect (Settings → Player, default off) and Home browse node with YouTube Home sections, suggested and recent content alongside local library",
     "The update-available dialog now offers “Remind me in 24 hrs”: postpone it once and it stays away for a full day — and for that same version — so it can no longer pop up and interrupt you while you are adding songs to a playlist.",
     "Reel Import got a roomier, easier-on-the-eyes layout: more breathing room, taller recommendation rows and a scrollable result screen, so the match screen, the “More like this” list and the manual-search screen no longer look cramped on a phone.",
     "Reel Import now asks before adding a suggested song: after your reel's song is added, the “More like this” recommendations open a confirmation card — with artwork, a preview and an explicit “Add to <playlist>” button — instead of being added the moment you tap them.",
@@ -9,6 +14,19 @@
     "Reel Import song preview: play the identified song — or any candidate in the picker — before you confirm, so you can hear it first instead of trusting the name alone."
   ],
   "bug_fixes": [
+    "Stats: fix NullPointerException crash when opening Stats by making SongWithStats thumbnailUrl and play counts safely nullable, removing unsafe forced unwraps, and guarding date sequence boundaries (#646)",
+    "Playback: fix custom addon (BitChord) queue repeating the first track audio when advancing, caused by stale trackedMediaItem metadata and loose title-only matching; resolve per-mediaId metadata with strict title+artist+duration match and addon-aware preload",
+    "Android Auto: fix Home shelves rendering without artwork and shuffle-led shelves ('Casuale') browsing empty, by falling back to the first item thumbnail and mapping musicShuffleRenderer",
+    "Android Auto: embed browse artwork in the media item so covers load without the app in the foreground, and stop replacing failed artwork lookups with a blank bitmap",
+    "Prevent missing song-ID map crashes in Quick Picks and Forgotten Favorites by keeping randomized Room relation queries stable across statement resets",
+    "Fix artist names containing & showing as \"amp;\" (e.g. \"Sabin Rai, amp; The Pharaoh\") by decoding HTML entities and dropping orphan entity fragments from YouTube Music API display text at the :innertube parse boundary",
+    "Music Flow: show the translucent play icon on album artwork only while paused, hide it during playback, and keep direct tap playback control",
+    "Music Flow: synchronize lyrics to playback and saved timing offsets, follow paused seeks and song changes, preserve instrumental gaps, and animate line changes with a smooth slide and fade",
+    "Music Flow: automatically scroll long song titles and artist names",
+    "Lyrics: time out stalled providers so other lyrics sources can be tried",
+    "Android Auto: deliver artwork as signed content URIs, cache cluster covers, stabilize Home shelves across reconnects, and fall back to hqdefault when maxresdefault 404s (#677)",
+    "Playback: fix downloaded track playback mismatch when filtering explicit/video songs, and recognize completed offline downloads when contentLength is unset (#666, #674)",
+    "Playlists: allow removing duplicate songs from a playlist directly from the 'Add to playlist' dialog and fix premature dialog dismissal (#655, #675)",
     "Fixed a case where a reel's song was not matched even though Shazam identified it perfectly: the import used to require the reel's metadata up front and bailed out with “Couldn't find that song.” if that lookup failed, never trying the audio fingerprint. The fingerprint (the reel's own sound) now always runs, and a metadata failure only affects the fallback searches.",
     "Removed the Instagram session setting and all related code — it was never usable in practice (Instagram blocks datacenter/app access regardless) and only cluttered Settings → Content. Reel identification relies on audio fingerprinting and anonymous metadata.",
     "Reel Import now tells apart songs that share a title but are different tracks (for example one “Bulleya” from one film and another “Bulleya” from a different film): matches that come from metadata rather than the audio fingerprint are now ordered so the one matching the reel's own album/artist comes first, and the album/film is shown on every result so you can pick the right one — and preview it before confirming.",

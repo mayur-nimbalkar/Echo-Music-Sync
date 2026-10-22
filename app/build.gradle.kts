@@ -27,16 +27,16 @@ if (hasGoogleServicesConfig) {
 android {
   namespace = "echo.music.iad1tya"
   compileSdk = 37
-  ndkVersion = "27.0.12077973"
+  ndkVersion = "28.2.13676358"
 
   defaultConfig {
     applicationId = "echo.music.iad1tya"
     minSdk = 26
     targetSdk = 36
-    // "1.4.1" is the upstream main source version; the trailing part marks the fork's add-on.
+    // "1.4.3" is the upstream main source version; the trailing part marks the fork's add-on.
     // versionCode stays monotonic so it installs over previous fork builds.
-    versionCode = 182
-    versionName = "1.4.1.5"
+    versionCode = 183
+    versionName = "1.4.3.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
@@ -259,6 +259,9 @@ dependencies {
 
   implementation(project(":core"))
   implementation(project(":playback"))
+  implementation(project(":audio-dsp"))
+  implementation(project(":dsp-core"))
+  implementation(project(":usbaudio"))
 
   // Firebase - GMS flavor only (excluded from F-Droid / FOSS builds)
   "gmsImplementation"(platform("com.google.firebase:firebase-bom:34.19.0"))
@@ -372,4 +375,6 @@ dependencies {
   implementation(libs.youtubedl.android.ffmpeg)
 
   testImplementation(libs.junit)
+  testImplementation(libs.kotlinx.coroutines.test)
+  testImplementation(libs.robolectric)
 }

@@ -34,6 +34,7 @@ import echo.music.iad1tya.BuildConfig
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.R
 import echo.music.iad1tya.constants.AudioNormalizationKey
+import echo.music.iad1tya.constants.VarispeedKey
 import echo.music.iad1tya.constants.AudioOffload
 import echo.music.iad1tya.constants.AudioQuality
 import echo.music.iad1tya.constants.AudioQualityKey
@@ -48,8 +49,10 @@ import echo.music.iad1tya.constants.CrossfadeGaplessKey
 import echo.music.iad1tya.constants.DisableLoadMoreWhenRepeatAllKey
 import echo.music.iad1tya.constants.DownloadOnWifiOnlyKey
 import echo.music.iad1tya.constants.DownloadWithMetadataKey
+import echo.music.iad1tya.constants.EnableBitPerfectUsbDacKey
 import echo.music.iad1tya.constants.EnableExportAsMp3Key
 import echo.music.iad1tya.constants.EnableGoogleCastKey
+import echo.music.iad1tya.constants.UsbDacVolumeModeKey
 import echo.music.iad1tya.constants.HistoryDuration
 import echo.music.iad1tya.constants.KeepScreenOn
 import echo.music.iad1tya.constants.PauseOnMute
@@ -61,6 +64,7 @@ import echo.music.iad1tya.constants.PreloadNextSongLimitKey
 import echo.music.iad1tya.constants.PreventDuplicateTracksInQueueKey
 import echo.music.iad1tya.constants.RememberShuffleAndRepeatKey
 import echo.music.iad1tya.constants.ResumeOnBluetoothConnectKey
+import echo.music.iad1tya.constants.AutoplayOnAutomotiveConnectKey
 import echo.music.iad1tya.constants.SeekExtraSeconds
 import echo.music.iad1tya.constants.ShufflePlaylistFirstKey
 import echo.music.iad1tya.constants.SimilarContent
@@ -88,6 +92,16 @@ fun PlayerSettings(
 
   val (audioQuality, onAudioQualityChange) =
     rememberEnumPreference(AudioQualityKey, defaultValue = AudioQuality.OPUS)
+  val (audioQualityWifi, onAudioQualityWifiChange) =
+    rememberEnumPreference(
+      echo.music.iad1tya.constants.AudioQualityWifiKey,
+      defaultValue = AudioQuality.LOSSLESS
+    )
+  val (audioQualityCellular, onAudioQualityCellularChange) =
+    rememberEnumPreference(
+      echo.music.iad1tya.constants.AudioQualityCellularKey,
+      defaultValue = AudioQuality.MEDIUM
+    )
 
   val (crossfadeEnabled, onCrossfadeEnabledChange) =
     rememberPreference(CrossfadeEnabledKey, defaultValue = false)
@@ -104,6 +118,7 @@ fun PlayerSettings(
   val (skipSilence, onSkipSilenceChange) = rememberPreference(SkipSilenceKey, defaultValue = false)
   val (skipSilenceInstant, onSkipSilenceInstantChange) =
     rememberPreference(SkipSilenceInstantKey, defaultValue = false)
+  val (varispeed, onVarispeedChange) = rememberPreference(VarispeedKey, defaultValue = false)
   val (audioNormalization, onAudioNormalizationChange) =
     rememberPreference(AudioNormalizationKey, defaultValue = true)
   val (audioLoudnessPreset, onAudioLoudnessPresetChange) =
@@ -118,6 +133,12 @@ fun PlayerSettings(
 
   val (audioOffload, onAudioOffloadChange) =
     rememberPreference(key = AudioOffload, defaultValue = false)
+
+  val (enableBitPerfectUsbDac, onEnableBitPerfectUsbDacChange) =
+    rememberPreference(key = EnableBitPerfectUsbDacKey, defaultValue = false)
+
+  val (usbDacVolumeMode, onUsbDacVolumeModeChange) =
+    rememberPreference(key = UsbDacVolumeModeKey, defaultValue = "PURE_BIT_PERFECT")
 
   val (preloadNextSongEnabled, onPreloadNextSongEnabledChange) =
     rememberPreference(key = PreloadNextSongEnabledKey, defaultValue = true)
@@ -138,6 +159,9 @@ fun PlayerSettings(
 
   val (enableGoogleCast, onEnableGoogleCastChange) =
     rememberPreference(key = EnableGoogleCastKey, defaultValue = true)
+
+  val (showSeekButtons, onShowSeekButtonsChange) =
+    rememberPreference(echo.music.iad1tya.constants.ShowSeekButtonsKey, defaultValue = false)
 
   val (seekExtraSeconds, onSeekExtraSeconds) =
     rememberPreference(SeekExtraSeconds, defaultValue = false)
@@ -169,11 +193,14 @@ fun PlayerSettings(
   val (pauseOnMute, onPauseOnMuteChange) = rememberPreference(PauseOnMute, defaultValue = false)
   val (resumeOnBluetoothConnect, onResumeOnBluetoothConnectChange) =
     rememberPreference(ResumeOnBluetoothConnectKey, defaultValue = false)
+  val (autoplayOnAutomotiveConnect, onAutoplayOnAutomotiveConnectChange) =
+    rememberPreference(AutoplayOnAutomotiveConnectKey, defaultValue = false)
   val (keepScreenOn, onKeepScreenOnChange) = rememberPreference(KeepScreenOn, defaultValue = false)
   val (historyDuration, onHistoryDurationChange) =
     rememberPreference(HistoryDuration, defaultValue = 1f)
 
-  var showAudioQualityDialog by remember { mutableStateOf(false) }
+  var showAudioQualityWifiDialog by remember { mutableStateOf(false) }
+  var showAudioQualityCellularDialog by remember { mutableStateOf(false) }
   var showDownloadQualityDialog by remember { mutableStateOf(false) }
   var showPlaybackEngineDialog by remember { mutableStateOf(false) }
 
@@ -189,23 +216,43 @@ fun PlayerSettings(
       defaultValue = echo.music.iad1tya.constants.DownloadQuality.YOUTUBE
     )
 
-  if (showAudioQualityDialog) {
+  if (showAudioQualityWifiDialog) {
     EnumDialog(
-      onDismiss = { showAudioQualityDialog = false },
+      onDismiss = { showAudioQualityWifiDialog = false },
       onSelect = {
-        onAudioQualityChange(it)
-        showAudioQualityDialog = false
+        onAudioQualityWifiChange(it)
+        showAudioQualityWifiDialog = false
       },
-      title = stringResource(R.string.audio_quality),
-      current = audioQuality,
-      values = listOf(AudioQuality.OPUS),
-      valueText = {
-        when (it) {
-          AudioQuality.OPUS -> "Opus"
-          else -> ""
-        }
+      title = stringResource(R.string.audio_quality_wifi),
+      current = audioQualityWifi,
+      values = listOf(
+        AudioQuality.LOSSLESS,
+        AudioQuality.HIGH,
+        AudioQuality.MEDIUM,
+        AudioQuality.LOW,
+      ),
+      valueText = { it.label },
+      valueDescription = { "${it.detail} (${it.hourly})" }
+    )
+  }
+
+  if (showAudioQualityCellularDialog) {
+    EnumDialog(
+      onDismiss = { showAudioQualityCellularDialog = false },
+      onSelect = {
+        onAudioQualityCellularChange(it)
+        showAudioQualityCellularDialog = false
       },
-      valueDescription = { "" }
+      title = stringResource(R.string.audio_quality_cellular),
+      current = audioQualityCellular,
+      values = listOf(
+        AudioQuality.MEDIUM,
+        AudioQuality.LOW,
+        AudioQuality.HIGH,
+        AudioQuality.LOSSLESS,
+      ),
+      valueText = { it.label },
+      valueDescription = { "${it.detail} (${it.hourly})" }
     )
   }
 
@@ -378,18 +425,38 @@ fun PlayerSettings(
         buildList {
           add(
             Material3SettingsItem(
-              isHighlighted = (highlightKey == stringResource(R.string.audio_quality)),
-              icon = painterResource(R.drawable.graphic_eq),
-              title = { Text(stringResource(R.string.audio_quality)) },
-              description = {
-                Text(
-                  when (audioQuality) {
-                    AudioQuality.OPUS -> "Opus"
-                    else -> "Opus"
-                  }
-                )
+              isHighlighted = (highlightKey == stringResource(R.string.show_seek_buttons)),
+              icon = painterResource(R.drawable.fast_forward),
+              title = { Text(stringResource(R.string.show_seek_buttons)) },
+              description = { Text(stringResource(R.string.show_seek_buttons_desc)) },
+              trailingContent = {
+                Switch(checked = showSeekButtons, onCheckedChange = onShowSeekButtonsChange)
               },
-              onClick = null
+              onClick = { onShowSeekButtonsChange(!showSeekButtons) }
+            )
+          )
+
+          add(
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.audio_quality_wifi)),
+              icon = painterResource(R.drawable.wifi_proxy),
+              title = { Text(stringResource(R.string.audio_quality_wifi)) },
+              description = {
+                Text("${audioQualityWifi.label} · ${audioQualityWifi.detail}")
+              },
+              onClick = { showAudioQualityWifiDialog = true }
+            )
+          )
+
+          add(
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.audio_quality_cellular)),
+              icon = painterResource(R.drawable.network_node),
+              title = { Text(stringResource(R.string.audio_quality_cellular)) },
+              description = {
+                Text("${audioQualityCellular.label} · ${audioQualityCellular.detail} (${audioQualityCellular.hourly})")
+              },
+              onClick = { showAudioQualityCellularDialog = true }
             )
           )
 
@@ -648,6 +715,32 @@ fun PlayerSettings(
 
           add(
             Material3SettingsItem(
+              isHighlighted = (highlightKey == "Bit-Perfect USB-DAC"),
+              icon = painterResource(R.drawable.volume_up),
+              title = { Text("Bit-Perfect USB-DAC Output") },
+              description = { Text("Direct UAC1/UAC2 driver bypassing Android OS mixer") },
+              trailingContent = {
+                Switch(
+                  checked = enableBitPerfectUsbDac,
+                  onCheckedChange = onEnableBitPerfectUsbDacChange,
+                  thumbContent = {
+                    Icon(
+                      painter =
+                        painterResource(
+                          id = if (enableBitPerfectUsbDac) R.drawable.check else R.drawable.close
+                        ),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                  }
+                )
+              },
+              onClick = { onEnableBitPerfectUsbDacChange(!enableBitPerfectUsbDac) }
+            )
+          )
+
+          add(
+            Material3SettingsItem(
               isHighlighted = (highlightKey == stringResource(R.string.history_duration)),
               icon = painterResource(R.drawable.history),
               title = { Text(stringResource(R.string.history_duration)) },
@@ -736,6 +829,28 @@ fun PlayerSettings(
                 )
               },
               onClick = { onAudioNormalizationChange(!audioNormalization) }
+            )
+          )
+          add(
+            Material3SettingsItem(
+              isHighlighted = (highlightKey == stringResource(R.string.varispeed)),
+              icon = painterResource(R.drawable.speed),
+              title = { Text(stringResource(R.string.varispeed)) },
+              description = { Text(stringResource(R.string.varispeed_description)) },
+              trailingContent = {
+                Switch(
+                  checked = varispeed,
+                  onCheckedChange = onVarispeedChange,
+                  thumbContent = {
+                    Icon(
+                      painter = painterResource(id = if (varispeed) R.drawable.check else R.drawable.close),
+                      contentDescription = null,
+                      modifier = Modifier.size(SwitchDefaults.IconSize)
+                    )
+                  }
+                )
+              },
+              onClick = { onVarispeedChange(!varispeed) }
             )
           )
           add(
@@ -1248,6 +1363,29 @@ fun PlayerSettings(
               )
             },
             onClick = { onResumeOnBluetoothConnectChange(!resumeOnBluetoothConnect) }
+          ),
+          Material3SettingsItem(
+            isHighlighted = (highlightKey == stringResource(R.string.autoplay_on_automotive_connect)),
+            icon = painterResource(R.drawable.auto_play),
+            title = { Text(stringResource(R.string.autoplay_on_automotive_connect)) },
+            description = { Text(stringResource(R.string.autoplay_on_automotive_connect_desc)) },
+            trailingContent = {
+              Switch(
+                checked = autoplayOnAutomotiveConnect,
+                onCheckedChange = onAutoplayOnAutomotiveConnectChange,
+                thumbContent = {
+                  Icon(
+                    painter =
+                      painterResource(
+                        id = if (autoplayOnAutomotiveConnect) R.drawable.check else R.drawable.close
+                      ),
+                    contentDescription = null,
+                    modifier = Modifier.size(SwitchDefaults.IconSize)
+                  )
+                }
+              )
+            },
+            onClick = { onAutoplayOnAutomotiveConnectChange(!autoplayOnAutomotiveConnect) }
           ),
           Material3SettingsItem(
             isHighlighted =

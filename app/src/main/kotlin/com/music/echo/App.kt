@@ -28,6 +28,7 @@ import echo.music.iad1tya.extensions.toEnum
 import echo.music.iad1tya.extensions.toInetSocketAddress
 import echo.music.iad1tya.utils.AppContextHolder
 import echo.music.iad1tya.utils.CrashHandler
+import echo.music.iad1tya.utils.YouTubeThumbnailFallbackInterceptor
 import echo.music.iad1tya.utils.dataStore
 import echo.music.iad1tya.utils.reportException
 import java.net.Authenticator
@@ -362,6 +363,7 @@ class App : Application(), SingletonImageLoader.Factory {
       .apply {
         crossfade(true)
         allowHardware(Build.VERSION.SDK_INT >= Build.VERSION_CODES.P)
+        components { add(YouTubeThumbnailFallbackInterceptor()) }
 
         memoryCache { MemoryCache.Builder().maxSizePercent(context, 0.25).build() }
         if (cacheSize == 0) {

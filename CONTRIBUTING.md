@@ -70,7 +70,7 @@ We are committed to providing a welcoming and inspiring community for all. We pl
    ```
 3. Add the upstream repository:
    ```bash
-   git remote add upstream https://github.com/iad1tya/Echo-Music.git
+   git remote add upstream https://github.com/EchoMusicApp/Echo-Music.git
    ```
 
 ## Development Setup
@@ -95,8 +95,8 @@ If you want to test Firebase features:
 
 1. Create a Firebase project
 2. Add Android apps with package names:
-   - `iad1tya.echo.music` (release)
-   - `iad1tya.echo.music.debug` (debug)
+   - `echo.music.iad1tya` (release)
+   - `echo.music.iad1tya.debug` (debug)
 3. Copy the template and configure it with your Firebase credentials:
    ```bash
    cp app/google-services.json.template app/google-services.json
@@ -239,7 +239,7 @@ When creating a Pull Request on GitHub, you **must** adhere to the following for
 3. **Reference Issues:** Always link related issues using keywords (e.g., `Fixes #123` or `Closes #456`).
 4. **Screenshots/Videos:** **Mandatory** for any UI/UX changes.
 5. **Testing Instructions:** Provide clear, step-by-step instructions on how the reviewer can test your changes.
-6. **Release Notes:** Be aware that your PR title and description may be used directly in `RELEASE_INFO.md`. Ensure it is grammatically correct and professional.
+6. **Release Notes:** Be aware that your PR title and description may be used directly in release notes and changelogs. Ensure it is grammatically correct and professional.
 
 If your PR does not meet these criteria, you will be asked to update it before review begins.
 
@@ -340,7 +340,7 @@ widget/         Home-screen widget
 - **Functions**: camelCase (`playMusic()`)
 - **Variables**: camelCase (`currentSong`)
 - **Constants**: UPPER_SNAKE_CASE (`MAX_VOLUME`)
-- **Packages**: lowercase (`com.maxrave.echo.ui`)
+- **Packages**: lowercase (`echo.music.iad1tya.ui`)
 
 ## Testing
 

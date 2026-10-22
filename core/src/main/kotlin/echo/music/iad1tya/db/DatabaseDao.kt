@@ -56,6 +56,7 @@ import java.text.Collator
 import java.time.LocalDateTime
 import java.time.ZoneOffset
 import java.util.Locale
+import kotlin.random.Random
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
 
@@ -258,6 +259,8 @@ interface DatabaseDao {
     previewSize: Int = 3,
   ): Flow<List<Song>>
 
+  // Room rereads relation queries after resetting the statement. Keep the randomized selection
+  // deterministic for that statement, otherwise its relation map can lack IDs from the second pass.
   @Transaction
   @Query(
     """
@@ -283,14 +286,33 @@ interface DatabaseDao {
                          SELECT id
                          FROM (SELECT id
                                FROM song
-                               ORDER BY totalPlayTime DESC
+                               ORDER BY ((rowid * :randomSeed) & 2147483647), id
                                LIMIT 10))
           AND song.hideFromQuickPicks = 0
-        ORDER BY referredCount DESC
+        ORDER BY ((song.rowid * :randomSeed) & 2147483647), song.id
         LIMIT 100
     """,
   )
-  fun quickPicks(now: Long = System.currentTimeMillis()): Flow<List<Song>>
+  fun quickPicks(
+    now: Long = System.currentTimeMillis(),
+    randomSeed: Int = Random.nextInt(1, Int.MAX_VALUE) or 1,
+  ): Flow<List<Song>>
+
+  @Query("SELECT id FROM song WHERE hideFromQuickPicks = 1")
+  fun hiddenFromQuickPicksSongIds(): Flow<List<String>>
+
+  @Transaction
+  @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
+  @Query(
+    """
+        SELECT song.* FROM song
+        JOIN event ON song.id = event.songId
+        GROUP BY song.id
+        ORDER BY MAX(event.timestamp) DESC, MAX(event.rowId) DESC
+        LIMIT :limit
+    """,
+  )
+  fun recentlyPlayedSongs(limit: Int = 50): Flow<List<Song>>
 
   @Transaction
   @Query(
@@ -584,10 +606,14 @@ interface DatabaseDao {
                  JOIN song on song.id = t.eid
         WHERE 0.2 * t.oldPlayTime > t.newPlayTime
           AND song.hideFromQuickPicks = 0
+        ORDER BY ((song.rowid * :randomSeed) & 2147483647), song.id
         LIMIT 100
     """
   )
-  fun forgottenFavorites(now: Long = System.currentTimeMillis()): Flow<List<Song>>
+  fun forgottenFavorites(
+    now: Long = System.currentTimeMillis(),
+    randomSeed: Int = Random.nextInt(1, Int.MAX_VALUE) or 1,
+  ): Flow<List<Song>>
 
   @Transaction
   @Query(
@@ -635,6 +661,17 @@ interface DatabaseDao {
   fun songArtistMap(songId: String): List<SongArtistMap>
 
   @Transaction @Query("SELECT * FROM song") fun allSongs(): Flow<List<Song>>
+
+  @Transaction
+  @Query(
+    """
+    SELECT * FROM song
+    WHERE inLibrary IS NOT NULL OR liked
+      OR EXISTS (SELECT 1 FROM playlist_song_map WHERE songId = song.id)
+    ORDER BY rowId DESC
+    """
+  )
+  fun carouselLibrarySongs(): Flow<List<Song>>
 
   @Transaction
   @SuppressWarnings(RoomWarnings.QUERY_MISMATCH)
@@ -1137,7 +1174,7 @@ interface DatabaseDao {
     }.map { it.reversed(descending) }
 
   @Transaction
-  @Query("SELECT * FROM song WHERE isDownloaded = 1 ORDER BY dateDownload")
+  @Query("SELECT * FROM song WHERE isDownloaded = 1 ORDER BY dateDownload ASC, rowId ASC")
   fun downloadedSongsByCreateDateAsc(): Flow<List<Song>>
 
   @Transaction
@@ -1295,6 +1332,9 @@ interface DatabaseDao {
 
   @Query("UPDATE song SET totalPlayTime = totalPlayTime + :playTime WHERE id = :songId")
   fun incrementTotalPlayTime(songId: String, playTime: Long)
+
+  @Query("UPDATE song SET liked = :liked, likedDate = :likedDate WHERE id = :songId")
+  fun updateLikedStatus(songId: String, liked: Boolean, likedDate: LocalDateTime?)
 
   @Query(
     "UPDATE playCount SET count = count + 1 WHERE song = :songId AND year = :year AND month = :month"

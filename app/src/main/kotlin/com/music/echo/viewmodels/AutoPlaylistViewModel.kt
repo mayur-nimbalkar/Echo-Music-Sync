@@ -7,6 +7,8 @@ import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
 import echo.music.iad1tya.constants.ExportedSongIdsKey
+import echo.music.iad1tya.constants.DownloadedSongSortTypeKey
+import echo.music.iad1tya.constants.DownloadedSongSortDescendingKey
 import echo.music.iad1tya.constants.HideExplicitKey
 import echo.music.iad1tya.constants.HideVideoSongsKey
 import echo.music.iad1tya.constants.SongSortDescendingKey
@@ -40,6 +42,9 @@ constructor(
   private val syncUtils: SyncUtils,
 ) : ViewModel() {
   val playlist = savedStateHandle.get<String>("playlist")!!
+  private val sortTypeKey = if (playlist == "downloaded") DownloadedSongSortTypeKey else SongSortTypeKey
+  private val sortDescendingKey =
+    if (playlist == "downloaded") DownloadedSongSortDescendingKey else SongSortDescendingKey
 
   private val _isRefreshing = MutableStateFlow(false)
   val isRefreshing = _isRefreshing.asStateFlow()
@@ -51,13 +56,13 @@ constructor(
         Triple(
           Triple(
             (try {
-                it[SongSortTypeKey]
+                it[sortTypeKey]
               } catch (e: Exception) {
                 null
               })
               .toEnum(SongSortType.CREATE_DATE) to
               ((try {
-                it[SongSortDescendingKey]
+                it[sortDescendingKey]
               } catch (e: Exception) {
                 null
               }) ?: true),

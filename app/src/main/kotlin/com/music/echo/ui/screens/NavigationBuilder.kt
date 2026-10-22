@@ -30,13 +30,16 @@ import echo.music.iad1tya.ui.screens.artist.ArtistScreen
 import echo.music.iad1tya.ui.screens.artist.ArtistSongsScreen
 import echo.music.iad1tya.ui.screens.equalizer.EqScreen
 import echo.music.iad1tya.ui.screens.equalizer.axion.AxionEqScreen
+import echo.music.iad1tya.ui.screens.generate.GenerateScreen
 import echo.music.iad1tya.ui.screens.library.LibraryScreen
 import echo.music.iad1tya.ui.screens.library.LocalSongScreen
+import echo.music.iad1tya.ui.screens.musicflow.MusicFlowScreen
 import echo.music.iad1tya.ui.screens.playlist.AutoPlaylistScreen
 import echo.music.iad1tya.ui.screens.playlist.BottomPlaylistScreen
 import echo.music.iad1tya.ui.screens.playlist.CachePlaylistScreen
 import echo.music.iad1tya.ui.screens.playlist.LocalPlaylistScreen
 import echo.music.iad1tya.ui.screens.playlist.OnlinePlaylistScreen
+import echo.music.iad1tya.ui.screens.playlist.SpotifyPlaylistDetailScreen
 import echo.music.iad1tya.ui.screens.playlist.TopPlaylistScreen
 import echo.music.iad1tya.ui.screens.recognition.RecognitionHistoryScreen
 import echo.music.iad1tya.ui.screens.recognition.RecognitionScreen
@@ -53,6 +56,7 @@ import echo.music.iad1tya.ui.screens.settings.BlockedArtistsScreen
 import echo.music.iad1tya.ui.screens.settings.ContentSettings
 import echo.music.iad1tya.ui.screens.settings.DarkMode
 import echo.music.iad1tya.ui.screens.settings.GlassEffectSettings
+import echo.music.iad1tya.ui.screens.settings.MusicFlowSettings
 import echo.music.iad1tya.ui.screens.settings.PlayerSettings
 import echo.music.iad1tya.ui.screens.settings.PrivacySettings
 import echo.music.iad1tya.ui.screens.settings.SettingsScreen
@@ -104,6 +108,8 @@ fun NavGraphBuilder.navigationBuilder(
   composable("history") { HistoryScreen(navController) }
 
   composable("ambient_mode") { AmbientModeScreen(navController) }
+
+  composable("music_flow") { MusicFlowScreen(navController) }
 
   composable("local_songs") { LocalSongScreen(navController) }
 
@@ -213,6 +219,33 @@ fun NavGraphBuilder.navigationBuilder(
       ),
   ) {
     OnlinePlaylistScreen(navController, scrollBehavior)
+  }
+
+  composable(
+    route = "spotify_playlist/{playlistId}?title={title}&cover={cover}",
+    arguments =
+      listOf(
+        navArgument("playlistId") { type = NavType.StringType },
+        navArgument("title") {
+          type = NavType.StringType
+          defaultValue = "Playlist"
+        },
+        navArgument("cover") {
+          type = NavType.StringType
+          defaultValue = ""
+        },
+      ),
+  ) { backStackEntry ->
+    val playlistId = backStackEntry.arguments?.getString("playlistId") ?: return@composable
+    val title = backStackEntry.arguments?.getString("title") ?: "Playlist"
+    val cover = backStackEntry.arguments?.getString("cover") ?: ""
+    SpotifyPlaylistDetailScreen(
+      navController = navController,
+      scrollBehavior = scrollBehavior,
+      playlistId = playlistId,
+      playlistTitle = title,
+      playlistCover = cover,
+    )
   }
 
   composable(
@@ -343,6 +376,7 @@ fun NavGraphBuilder.navigationBuilder(
   }
 
   composable("settings/appearance/theme") { ThemeScreen(navController) }
+  composable("settings/music_flow") { MusicFlowSettings(navController, scrollBehavior) }
   composable(
     route = "settings/appearance/haptics?highlightKey={highlightKey}",
     arguments = listOf(navArgument("highlightKey") { type = NavType.StringType; nullable = true })
@@ -495,6 +529,12 @@ fun NavGraphBuilder.navigationBuilder(
     )
   }
 
+  composable("settings/extensions") {
+    com.music.echo.ui.screens.settings.ExtensionSettingsScreen(
+        navController = navController,
+        scrollBehavior = scrollBehavior
+    )
+  }
   composable("settings/discord") {
     echo.music.iad1tya.ui.screens.settings.DiscordSettings(navController, scrollBehavior)
   }
@@ -557,4 +597,5 @@ fun NavGraphBuilder.navigationBuilder(
   composable("recognition_history") { RecognitionHistoryScreen(navController) }
   composable("settings/changelog") { ChangelogScreen(navController, scrollBehavior) }
   composable("settings/commits") { CommitScreen(navController, scrollBehavior) }
+  composable("generate") { GenerateScreen(navController) }
 }

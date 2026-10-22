@@ -34,3 +34,7 @@ lastfm-empty/build/
 
 # Logs
 *.log
+
+# Reference source repositories (never commit)
+BitChord-main/
+ArchiveTune-main/
