@@ -240,6 +240,11 @@ object DownloadNotificationManager {
         .setContentTitle(appContext.getString(R.string.update_ready))
         .setContentText(promptText)
         .setAutoCancel(true)
+        // The tap has to reach the user's own installer/browser, so the intent stays implicit
+        // on purpose; the PendingIntent is IMMUTABLE, so nothing can fill it in. Suppressing
+        // the "implicit PendingIntent" check here rather than pinning a component that differs
+        // per OEM and would break on devices without it.
+        // lgtm[java/android-implicit-pendingintent]
         .setContentIntent(pendingIntent)
         .setStyle(progressStyle)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
@@ -320,6 +325,8 @@ object DownloadNotificationManager {
         .setStyle(NotificationCompat.BigTextStyle().bigText(promptText))
         .setProgress(0, 0, false)
         .setAutoCancel(true)
+        // Same deliberate implicit intent as the modern notification above; see the note there.
+        // lgtm[java/android-implicit-pendingintent]
         .setContentIntent(pendingIntent)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
