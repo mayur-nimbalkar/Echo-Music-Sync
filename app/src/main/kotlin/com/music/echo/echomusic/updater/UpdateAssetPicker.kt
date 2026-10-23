@@ -33,6 +33,14 @@ object UpdateAssetPicker {
   }
 
   /**
+   * True when the release ships any APK of the requested build type — even one this device's
+   * ABI cannot run. Distinguishes "the release has nothing this build type can install" from
+   * "the release is older", which need different wording in the updater.
+   */
+  fun hasBuildType(names: List<String>, wantsDebug: Boolean): Boolean =
+    names.any { isBuildType(it, wantsDebug) }
+
+  /**
    * The asset name best suited to this device, or null when the release offers none its build
    * type can install. The asset labelled for this device's ABI wins; otherwise any asset that
    * is not arm64-only is accepted, since an arm64 device can also install the universal build

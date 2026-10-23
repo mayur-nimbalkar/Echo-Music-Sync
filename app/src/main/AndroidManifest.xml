@@ -157,6 +157,8 @@
                 <data android:pathPrefix="/v/" />
                 <data android:pathPrefix="/embed/" />
                 <data android:pathPrefix="/watch" />
+                <!-- Shorts open the import flow (identified by audio fingerprint) -->
+                <data android:pathPrefix="/shorts/" />
                 <!-- channel prefix -->
                 <data android:pathPrefix="/channel/" />
                 <data android:pathPrefix="/user/" />

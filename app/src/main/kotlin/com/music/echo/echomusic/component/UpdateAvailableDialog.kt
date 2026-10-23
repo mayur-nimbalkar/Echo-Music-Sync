@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import echo.music.iad1tya.R
 import echo.music.iad1tya.echomusic.updater.ChangelogSection
+import echo.music.iad1tya.echomusic.updater.RELEASES_PAGE_URL
 import echo.music.iad1tya.ui.utils.parseMarkdownToSections
 import echo.music.iad1tya.ui.utils.parseSimpleMarkdown
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
@@ -199,8 +200,9 @@ fun UpdateAvailableDialog(
           Button(
             onClick = {
               onDismiss()
-              val intent =
-                Intent(Intent.ACTION_VIEW, android.net.Uri.parse("https://echomusic.fun"))
+              // This fork's own releases. Upstream's site has no APK that can install over
+              // this build, so the button used to lead nowhere useful.
+              val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(RELEASES_PAGE_URL))
               context.startActivity(intent)
             },
             shape = actionShape,

@@ -220,7 +220,7 @@
     <string name="reel_import_add_related_confirm">Add to %s</string>
     <string name="reel_import_preview_hint">Tap to preview</string>
     <string name="reel_import_error_ytdlp">Audio extraction failed. Try updating yt-dlp.</string>
-    <string name="reel_import_not_reel">This link is not an Instagram Reel</string>
+    <string name="reel_import_not_reel">This link is not an Instagram reel, a YouTube Short or an X post</string>
     <string name="reel_import_add_to_playlist">Add to playlist</string>
     <string name="reel_import_choose_playlist">Choose a playlist</string>
     <string name="reel_import_default_playlist">Add future reels without asking</string>
@@ -228,7 +228,7 @@
     <string name="reel_import_stop_default">Stop adding automatically</string>
     <string name="reel_import_added">Added to %s</string>
     <string name="reel_import_no_playlists">No playlists yet. Create one to save this song.</string>
-    <string name="reel_import_share_hint">Share an Instagram reel to Echo Music to import its song.</string>
+    <string name="reel_import_share_hint">Share an Instagram reel, a YouTube Short or an X post to Echo Music to import its song.</string>
     <string name="reel_import_how_it_works">How it works</string>
     <string name="reel_import_step_share">Share</string>
     <string name="reel_import_step_identify">Identify</string>
@@ -240,7 +240,7 @@
     <string name="reel_import_pick_title">Is this the song from your reel?</string>
     <string name="reel_import_more_results">+%d more — refine your search to see them</string>
     <string name="reel_import_source_fingerprint">Identified from the reel\'s audio</string>
-    <string name="reel_import_source_official">Official Instagram audio</string>
+    <string name="reel_import_source_official">Official audio of the post</string>
 
     <string name="edit_artist">Edit artist</string>
     <string name="artist_name">Artist name</string>
