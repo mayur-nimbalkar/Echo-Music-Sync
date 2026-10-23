@@ -7,6 +7,9 @@ on:
     branches: [ "main" ]
   schedule:
     - cron: '30 12 * * 1'
+  # Manual trigger: a crashed runner leaves the branch with a red CodeQL check and no way
+  # back in without a push. This gives anyone with Actions access a "Run workflow" button.
+  workflow_dispatch:
 
 jobs:
   analyze:
