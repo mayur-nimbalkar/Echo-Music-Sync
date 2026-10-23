@@ -133,17 +133,31 @@ private fun runsOnArm64(): Boolean =
  * are different applications) for this device's ABI. See [UpdateAssetPicker].
  */
 private fun pickApkAsset(assets: JSONArray): JSONObject? {
+  val byName = apkAssets(assets)
+  val picked =
+    UpdateAssetPicker.bestApkName(byName.keys.toList(), runsOnArm64(), BuildConfig.DEBUG)
+      ?: return null
+  return byName[picked]
+}
+
+/** Release assets keyed by name, in the order GitHub lists them. */
+private fun apkAssets(assets: JSONArray): LinkedHashMap<String, JSONObject> {
   val byName = LinkedHashMap<String, JSONObject>()
   for (i in 0 until assets.length()) {
     val asset = assets.optJSONObject(i) ?: continue
     val name = asset.optString("name")
     if (name.isNotEmpty()) byName.putIfAbsent(name, asset)
   }
-  val picked =
-    UpdateAssetPicker.bestApkName(byName.keys.toList(), runsOnArm64(), BuildConfig.DEBUG)
-      ?: return null
-  return byName[picked]
+  return byName
 }
+
+/**
+ * True when the release ships any APK of this install's build type. A stable install can only
+ * ever be upgraded by a stable asset and a debug install by a debug one, so "there is a newer
+ * release" and "there is an APK for this install" are two different questions.
+ */
+private fun releaseOffersInstalledBuildType(assets: JSONArray): Boolean =
+  UpdateAssetPicker.hasBuildType(apkAssets(assets).keys.toList(), BuildConfig.DEBUG)
 
 /** Download URL for [version] used when the release JSON carried no asset URL. */
 private fun fallbackApkUrl(version: String): String {
@@ -223,6 +237,24 @@ private fun installProblemMessage(
 
 data class ChangelogSection(val title: String, val items: List<String>)
 
+/** Outcome of one update check, shared by the update screen, the startup dialog and the worker. */
+data class UpdateCheckResult(
+  /** Newest release tag, or the installed version when nothing newer exists. */
+  val version: String,
+  val isAvailable: Boolean,
+  val changelog: List<ChangelogSection> = emptyList(),
+  val size: String = "",
+  val releaseDate: String = "",
+  val description: String? = null,
+  val imageUrl: String? = null,
+  val apkUrl: String? = null,
+  /**
+   * A newer release exists, but it publishes no APK for the build type that is installed —
+   * the two build types are separate applications, so it cannot be installed in place.
+   */
+  val buildTypeUnavailable: Boolean = false,
+)
+
 sealed class EchoUpdateStatus {
   object Idle : EchoUpdateStatus()
 
@@ -239,6 +271,9 @@ sealed class EchoUpdateStatus {
   ) : EchoUpdateStatus()
 
   data class NoUpdate(val version: String) : EchoUpdateStatus()
+
+  /** Newer release, but nothing this install's build type can upgrade with. */
+  data class NoInstallableBuild(val version: String) : EchoUpdateStatus()
 
   data class Error(val message: String) : EchoUpdateStatus()
 }
@@ -312,25 +347,29 @@ fun UpdateScreen(navController: NavHostController) {
       delay(1000L)
       checkForUpdate(
         context = context,
-        onSuccess = { tag, isAvailable, changelog, size, date, description, imageUrl, apkUrl ->
+        onSuccess = { result ->
           saveLastCheckedTime(
             context,
             LocalDateTime.now().format(DateTimeFormatter.ofPattern("d MMMM yyyy, h:mm a"))
           )
-          saveUpdateAvailableState(context, isAvailable)
+          saveUpdateAvailableState(context, result.isAvailable)
           status =
-            if (isAvailable) {
-              EchoUpdateStatus.Available(
-                version = tag,
-                changelog = changelog,
-                size = size,
-                releaseDate = date,
-                description = description,
-                imageUrl = imageUrl,
-                apkUrl = apkUrl
-              )
-            } else {
-              EchoUpdateStatus.NoUpdate(tag)
+            when {
+              result.isAvailable ->
+                EchoUpdateStatus.Available(
+                  version = result.version,
+                  changelog = result.changelog,
+                  size = result.size,
+                  releaseDate = result.releaseDate,
+                  description = result.description,
+                  imageUrl = result.imageUrl,
+                  apkUrl = result.apkUrl
+                )
+              // A newer release without an APK this build type can install: say so instead
+              // of claiming "on latest version" (which was simply untrue) or offering an
+              // asset that ends in "App not installed".
+              result.buildTypeUnavailable -> EchoUpdateStatus.NoInstallableBuild(result.version)
+              else -> EchoUpdateStatus.NoUpdate(result.version)
             }
         },
         onError = {
@@ -400,6 +439,7 @@ fun UpdateScreen(navController: NavHostController) {
             is EchoUpdateStatus.Idle,
             is EchoUpdateStatus.Checking,
             is EchoUpdateStatus.NoUpdate,
+            is EchoUpdateStatus.NoInstallableBuild,
             is EchoUpdateStatus.Error -> {
               AnimatedActionButton(
                 text = stringResource(R.string.check_for_update),
@@ -560,6 +600,47 @@ fun UpdateScreen(navController: NavHostController) {
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     textAlign = TextAlign.Center
                   )
+                }
+              }
+              is EchoUpdateStatus.NoInstallableBuild -> {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                  Icon(
+                    painter = painterResource(R.drawable.deployed_app_update),
+                    contentDescription = null,
+                    modifier = Modifier.size(120.dp),
+                    tint = MaterialTheme.colorScheme.primary
+                  )
+                  Spacer(modifier = Modifier.height(24.dp))
+                  Text(
+                    text = stringResource(R.string.update_build_type_unavailable_title),
+                    style = MaterialTheme.typography.titleLarge,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    textAlign = TextAlign.Center,
+                    fontWeight = FontWeight.Bold
+                  )
+                  Spacer(modifier = Modifier.height(8.dp))
+                  Text(
+                    text =
+                      stringResource(
+                        R.string.update_build_type_unavailable_message,
+                        currentStatus.version
+                      ),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    textAlign = TextAlign.Center
+                  )
+                  Spacer(modifier = Modifier.height(16.dp))
+                  TextButton(
+                    onClick = {
+                      ContextCompat.startActivity(
+                        context,
+                        Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE_URL)),
+                        null
+                      )
+                    }
+                  ) {
+                    Text(text = stringResource(R.string.update_open_releases))
+                  }
                 }
               }
               is EchoUpdateStatus.Error -> {
@@ -800,17 +881,7 @@ fun isNewerVersion(latestVersion: String, currentVersion: String): Boolean =
 
 suspend fun checkForUpdate(
   context: Context,
-  onSuccess:
-    (
-      tag: String,
-      isAvailable: Boolean,
-      changelog: List<ChangelogSection>,
-      size: String,
-      date: String,
-      description: String?,
-      imageUrl: String?,
-      apkUrl: String?
-    ) -> Unit,
+  onSuccess: (UpdateCheckResult) -> Unit,
   onError: () -> Unit,
 ) {
   withContext(Dispatchers.IO) {
@@ -880,14 +951,39 @@ suspend fun checkForUpdate(
         if (apkDownloadUrl.isNotEmpty()) {
           withContext(Dispatchers.Main) {
             onSuccess(
-              displayTag,
-              true,
-              changelogList,
-              apkSizeInMB,
-              formattedReleaseDate,
-              description,
-              imageUrl,
-              apkDownloadUrl
+              UpdateCheckResult(
+                version = displayTag,
+                isAvailable = true,
+                changelog = changelogList,
+                size = apkSizeInMB,
+                releaseDate = formattedReleaseDate,
+                description = description,
+                imageUrl = imageUrl,
+                apkUrl = apkDownloadUrl
+              )
+            )
+          }
+          return@withContext
+        }
+
+        // Newer release, but no ABI-compatible APK of this install's build type. A stable
+        // install cannot be upgraded by a debug asset (different application id and key),
+        // so quietly reporting "no update" hid the release entirely — and offering the
+        // asset anyway ended in Android's bare "App not installed". Say what is going on
+        // and point at the releases page instead.
+        if (!releaseOffersInstalledBuildType(assets)) {
+          withContext(Dispatchers.Main) {
+            onSuccess(
+              UpdateCheckResult(
+                version = displayTag,
+                isAvailable = false,
+                changelog = changelogList,
+                size = apkSizeInMB,
+                releaseDate = formattedReleaseDate,
+                description = description,
+                imageUrl = imageUrl,
+                buildTypeUnavailable = true
+              )
             )
           }
           return@withContext
@@ -895,7 +991,7 @@ suspend fun checkForUpdate(
       }
 
       withContext(Dispatchers.Main) {
-        onSuccess(currentVersion, false, emptyList(), "", "", null, null, null)
+        onSuccess(UpdateCheckResult(version = currentVersion, isAvailable = false))
       }
     } catch (e: Exception) {
       Log.e("UpdateCheck", "Error checking for updates: ${e.message}", e)

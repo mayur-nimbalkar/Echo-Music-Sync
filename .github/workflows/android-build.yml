@@ -90,6 +90,32 @@ jobs:
         ./gradlew assembleArm64GmsDebug assembleUniversalGmsDebug \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
+    # The in-app updater finds a release APK only by its exact asset name
+    # (Echo-Music-<tag>-<arm64|universal>-<debug|stable>.apk, see UpdateAssetPicker.assetName).
+    # Nothing else in CI would notice a version string that cannot sit in a filename, or an
+    # artifact renamed differently at publish time - the release would simply stop reaching
+    # every installed app. Fail here instead, and print the exact names to publish.
+    - name: Verify release asset naming
+      run: |
+        set -euo pipefail
+        AAPT2="$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)"
+        APK="$(find app/build/outputs/apk -name 'app-arm64-gms-debug.apk' | head -1)"
+        test -n "$APK"
+        VERSION="$("$AAPT2" dump badging "$APK" | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p")"
+        echo "versionName = $VERSION"
+        if ! printf '%s' "$VERSION" | grep -Eq '^[0-9A-Za-z._-]+$'; then
+          echo "::error::versionName '$VERSION' cannot be used in a release asset name"
+          exit 1
+        fi
+        for abi in arm64 universal; do
+          asset="Echo-Music-v$VERSION-$abi-debug.apk"
+          if ! printf '%s' "$asset" | grep -Eq '^Echo-Music-[^-]+-(arm64|universal)-(debug|stable)\.apk$'; then
+            echo "::error::'$asset' does not match the updater's asset naming scheme"
+            exit 1
+          fi
+          echo "Publish the $abi debug APK as: $asset"
+        done
+
     - name: Upload arm64 Debug APK
       uses: actions/upload-artifact@v7
       with:

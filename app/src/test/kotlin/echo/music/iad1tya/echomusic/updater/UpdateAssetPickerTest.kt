@@ -1,7 +1,9 @@
 package echo.music.iad1tya.echomusic.updater
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class UpdateAssetPickerTest {
@@ -60,6 +62,29 @@ class UpdateAssetPickerTest {
     val debugOnly = listOf("Echo-Music-v1.4.1.4-arm64-debug.apk")
     assertNull(UpdateAssetPicker.bestApkName(debugOnly, wantsArm64 = true, wantsDebug = false))
     assertNull(UpdateAssetPicker.bestApkName(emptyList(), wantsArm64 = true, wantsDebug = false))
+  }
+
+  @Test
+  fun `a debug-only release still knows the installed stable build type is missing`() {
+    // This is the fork's current state: releases publish debug APKs only. A stable install
+    // must be told the release exists but cannot be installed in place, not that it is
+    // up to date (which is simply false).
+    val debugOnly = listOf("Echo-Music-v1.4.3.2-arm64-debug.apk")
+    assertNull(UpdateAssetPicker.bestApkName(debugOnly, wantsArm64 = true, wantsDebug = false))
+    assertFalse(UpdateAssetPicker.hasBuildType(debugOnly, wantsDebug = false))
+    assertTrue(UpdateAssetPicker.hasBuildType(debugOnly, wantsDebug = true))
+  }
+
+  @Test
+  fun `hasBuildType only counts apk assets of that build type`() {
+    assertFalse(UpdateAssetPicker.hasBuildType(listOf("changelog.json"), wantsDebug = true))
+    assertFalse(UpdateAssetPicker.hasBuildType(emptyList(), wantsDebug = false))
+    assertTrue(
+      UpdateAssetPicker.hasBuildType(
+        listOf("changelog.json", "Echo-Music-v1.4.3.2-universal-debug.apk"),
+        wantsDebug = true,
+      )
+    )
   }
 
   @Test

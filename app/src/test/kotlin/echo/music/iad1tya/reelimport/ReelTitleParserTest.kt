@@ -344,4 +344,13 @@ class ReelTitleParserTest {
     assertTrue(ReelTitleParser.mentionsHandle("posted by user_1234"))
     assertTrue(!ReelTitleParser.mentionsHandle("Summer Nights"))
   }
+
+  @Test
+  fun `youtube short titles lose their discovery hashtags`() {
+    // Shorts are titled "Song Name #shorts #viral" far more often than not; the hashtags are
+    // noise in a YouTube Music query.
+    assertEquals("Some Song Name", ReelTitleParser.clean("Some Song Name #shorts #viral"))
+    assertEquals("Some Song Name", ReelTitleParser.songNameHint("Some Song Name #shorts", null))
+    assertEquals("Some Song Name", ReelTitleParser.songNameHint(null, "Some Song Name\n#shorts"))
+  }
 }

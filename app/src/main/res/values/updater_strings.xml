@@ -81,4 +81,7 @@
     <string name="new_update">New update</string>
     <string name="release_date_v">Released on: %1$s</string>
     <string name="update_size_v">Size: %1$s MB</string>
+    <string name="update_build_type_unavailable_title">New version available</string>
+    <string name="update_build_type_unavailable_message">Version %1$s is out, but this release has no APK for the build type installed here. The stable and debug builds are separate apps, so one cannot replace the other.</string>
+    <string name="update_open_releases">Open releases</string>
 </resources>

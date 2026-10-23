@@ -568,26 +568,26 @@ class MainActivity : ComponentActivity() {
         delay(2000L)
         checkForUpdate(
           context = context,
-          onSuccess = { latestVersion, isAvailable, changelog, _, _, description, _, _ ->
+          onSuccess = { result ->
             val currentVersion = BuildConfig.VERSION_NAME
             Log.d(
               "UpdateCheck",
-              "Startup check success. Latest: $latestVersion, Current: $currentVersion, isAvailable: $isAvailable"
+              "Startup check success. Latest: ${result.version}, Current: $currentVersion, isAvailable: ${result.isAvailable}"
             )
-            saveUpdateAvailableState(context, isAvailable)
+            saveUpdateAvailableState(context, result.isAvailable)
 
             // Respect a 24h snooze: after the user taps "Remind me in 24 hrs" the dialog
             // stays away for that version, so it can no longer pop up mid playlist add.
-            if (isAvailable && !isUpdateSnoozed(context, latestVersion)) {
-              availableUpdateVersion = latestVersion
-              availableUpdateChangelog = changelog
-              availableUpdateDescription = description
+            if (result.isAvailable && !isUpdateSnoozed(context, result.version)) {
+              availableUpdateVersion = result.version
+              availableUpdateChangelog = result.changelog
+              availableUpdateDescription = result.description
               showUpdateDialog = true
             }
 
-            if (isAvailable && getUpdateNotificationsSetting(context)) {
-              Log.d("UpdateCheck", "Posting update notification for $latestVersion")
-              UpdateNotificationHelper.showUpdateNotification(context, latestVersion)
+            if (result.isAvailable && getUpdateNotificationsSetting(context)) {
+              Log.d("UpdateCheck", "Posting update notification for ${result.version}")
+              UpdateNotificationHelper.showUpdateNotification(context, result.version)
             }
           },
           onError = { Log.e("UpdateCheck", "Startup check failed") }
@@ -1868,16 +1868,21 @@ class MainActivity : ComponentActivity() {
     intent.removeExtra(Intent.EXTRA_TEXT)
     val coroutineScope = lifecycle.coroutineScope
 
-    // Instagram reel share → reel import flow (fingerprint match → confirm → playlist).
-    val instagramHost = uri.host?.lowercase()
-    if (instagramHost != null &&
-        (instagramHost == "instagram.com" ||
-          instagramHost == "instagr.am" ||
-          instagramHost == "www.instagram.com" ||
-          instagramHost == "m.instagram.com" ||
-          instagramHost.endsWith(".instagram.com") ||
-          instagramHost.endsWith(".instagr.am"))
-    ) {
+    // Shared clip (Instagram reel/post, YouTube Short, X post) → import flow
+    // (fingerprint match → confirm → playlist). A plain youtube.com/youtu.be VIEW intent keeps
+    // its normal playback handling: only `/shorts/` links and YouTube links that arrived through
+    // a share sheet belong in the importer.
+    val clipSource = echo.music.iad1tya.reelimport.ReelSource.of(uri.toString())
+    val isShareIntent = intent.action == Intent.ACTION_SEND
+    val isShortsLink = uri.pathSegments.firstOrNull().equals("shorts", ignoreCase = true)
+    val importableClip =
+      when (clipSource) {
+        echo.music.iad1tya.reelimport.ReelSource.INSTAGRAM,
+        echo.music.iad1tya.reelimport.ReelSource.X -> true
+        echo.music.iad1tya.reelimport.ReelSource.YOUTUBE -> isShortsLink || isShareIntent
+        null -> false
+      }
+    if (importableClip) {
       val encoded = URLEncoder.encode(uri.toString(), "UTF-8")
       navController.navigate("reel_import?url=$encoded") {
         launchSingleTop = true

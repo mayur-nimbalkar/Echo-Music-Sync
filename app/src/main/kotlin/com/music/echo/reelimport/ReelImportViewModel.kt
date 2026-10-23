@@ -120,12 +120,16 @@ constructor(
     }
   }
 
-  /** Entry point from a shared Instagram link (raw share text or a bare URL). */
+  /**
+   * Entry point from a shared clip link (raw share text or a bare URL): an Instagram reel or
+   * post, a YouTube Short, or an X post.
+   */
   fun startFromLink(rawTextOrUrl: String) {
     val rawUrl = ReelTitleParser.extractUrl(rawTextOrUrl) ?: rawTextOrUrl.trim()
-    // Canonicalize: shared links carry tracking params (e.g. Instagram's `?stkn=…`)
-    // that break extraction and attribution fetches; the bare URL is always enough.
-    val url = ReelTitleParser.canonicalReelUrl(rawUrl)
+    // Canonicalize: shared links carry tracking params (Instagram's `?stkn=…`, YouTube's
+    // `?si=`, X's `?s=`) that break extraction and attribution fetches; the bare URL is
+    // always enough.
+    val url = ReelSource.canonicalize(rawUrl)
     if (!ReelMatcher.isSupportedReelUrl(url)) {
       _uiState.value = ReelImportUiState.Failed(ReelImportStage.NOT_A_REEL)
       return

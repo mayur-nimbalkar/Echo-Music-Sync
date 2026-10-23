@@ -22,13 +22,15 @@ import kotlin.time.Duration.Companion.seconds
 import timber.log.Timber
 
 /**
- * Identifies the background music of an Instagram Reel and resolves it to YouTube Music tracks.
+ * Identifies the background music of a shared clip — an Instagram Reel, a YouTube Short or an
+ * X post — and resolves it to YouTube Music tracks.
  *
  * Pipeline (audio fingerprint first, metadata second — captions are never used):
- * 1. The reel's own audio is fingerprinted with the same [VibraSignature] used by Echo Find
+ * 1. The clip's own audio is fingerprinted with the same [VibraSignature] used by Echo Find
  *    and identified through Shazam. This needs no account and is an exact match.
- * 2. Official track/artist/album metadata (yt-dlp `--dump-json`, Instagram's app media-info
- *    endpoint, the embed page's attribution line) is searched on YouTube Music as a fallback.
+ * 2. Official track/artist/album metadata (yt-dlp `--dump-json`, plus — on Instagram only —
+ *    the app media-info endpoint and the embed page's attribution line) is searched on
+ *    YouTube Music as a fallback.
  * 3. As a last resort the creator's caption is mined for a song name and searched, but its
  *    results only ever reach the picker — captions misname songs too often to auto-confirm.
  * 4. Anything else lands in the manual-search picker, prefilled with the best song-name hint
@@ -120,19 +122,11 @@ object ReelMatcher {
   /** Plain browser agent for page fetches and the yt-dlp audio extraction. */
   private const val IG_BROWSER_USER_AGENT = "Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36"
 
-  /** Reel URLs accepted by the importer; group 1 is the media shortcode. */
-  private val REEL_URL_REGEX =
-    Regex(
-      "^https?://(?:www\\.|m\\.)?instagram\\.com/(?:reel|reels|p)/([A-Za-z0-9_-]+)",
-      RegexOption.IGNORE_CASE,
-    )
-
-  fun isSupportedReelUrl(url: String?): Boolean =
-    url != null && REEL_URL_REGEX.containsMatchIn(url)
-
-  /** The reel's media shortcode, or null when [url] is not a reel link. */
-  private fun shortcodeOf(url: String): String? =
-    REEL_URL_REGEX.find(url)?.groupValues?.get(1)?.takeIf { it.isNotBlank() }
+  /**
+   * True when [url] points at a clip this importer can read: an Instagram reel/post, a YouTube
+   * Short (or `youtu.be` share link) or an X/Twitter post. See [ReelSource].
+   */
+  fun isSupportedReelUrl(url: String?): Boolean = ReelSource.of(url) != null
 
   sealed class MatchResult {
     /** A confident fingerprint match resolved on YouTube Music. */
@@ -341,15 +335,20 @@ object ReelMatcher {
   }
 
   /**
-   * Official audio metadata for the reel: yt-dlp's track/artist/album fields first, then
-   * (only when yt-dlp has nothing) Instagram's app media-info endpoint and finally the
-   * embed page's attribution line. Never falls back to creator captions.
+   * Official audio metadata for the clip: yt-dlp's track/artist/album fields first, then
+   * (only when yt-dlp has nothing, and only on Instagram) the app media-info endpoint and
+   * finally the embed page's attribution line. Never falls back to creator captions.
+   *
+   * YouTube and X expose no equivalent of Instagram's `clips_metadata` audio block, so for
+   * them the extra requests would cost two round trips and never return anything.
    */
   private suspend fun collectOfficialMetadata(reelUrl: String, info: ReelInfo): OfficialMetadata {
     val ytDlpQueries = ReelTitleParser.officialQueryCandidates(info.track, info.artist, info.album)
     if (ytDlpQueries.isNotEmpty()) {
       return OfficialMetadata(ytDlpQueries, info.track, info.artist, info.album)
     }
+
+    if (ReelSource.of(reelUrl)?.hasAudioMetadataApi != true) return OfficialMetadata(emptyList())
 
     ReelImportState.report(ReelImportStage.FETCHING_METADATA)
     val apiTriple = fetchOfficialMetadataApi(reelUrl)
@@ -696,7 +695,8 @@ object ReelMatcher {
    * the next stage. This is the same data the Instagram app shows on the audio page.
    */
   private suspend fun fetchOfficialMetadataApi(reelUrl: String): Triple<String, String?, String?>? {
-    val mediaId = shortcodeOf(reelUrl)?.let { shortcodeToMediaId(it) } ?: return null
+    val mediaId =
+      ReelSource.instagramShortcode(reelUrl)?.let { shortcodeToMediaId(it) } ?: return null
     return runCatching {
       withTimeoutOrNull(ATTRIBUTION_TIMEOUT_SECONDS.seconds) {
         val requestBuilder =

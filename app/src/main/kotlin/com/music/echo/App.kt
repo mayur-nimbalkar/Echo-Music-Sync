@@ -98,10 +98,14 @@ class App : Application(), SingletonImageLoader.Factory {
     echo.music.iad1tya.utils.cipher.CipherDeobfuscator.initialize(this)
     echo.music.iad1tya.utils.YTPlayerUtils.initialize()
 
-    // yt-dlp binaries for Instagram Reel import (background; first run unpacks python+ffmpeg)
+    // yt-dlp binaries for reel/Short/post import (background; first run unpacks python+ffmpeg)
     applicationScope.launch(Dispatchers.IO) {
       echo.music.iad1tya.reelimport.ReelMatcher.init(this@App)
     }
+
+    // Daily update check: the launch check alone never fires again while a session stays open.
+    runCatching { echo.music.iad1tya.echomusic.updater.UpdateCheckWorker.schedule(this) }
+      .onFailure { Timber.e(it, "Could not schedule the periodic update check") }
 
     if (BuildConfig.DEBUG) {
       Timber.plant(Timber.DebugTree())
