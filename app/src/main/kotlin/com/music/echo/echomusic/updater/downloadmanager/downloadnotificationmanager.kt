@@ -6,11 +6,15 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.toColorInt
 import echo.music.iad1tya.R
+import echo.music.iad1tya.echomusic.updater.RELEASES_PAGE_URL
+import echo.music.iad1tya.echomusic.updater.installProblemMessage
+import echo.music.iad1tya.echomusic.updater.inspectDownloadedApk
 
 object DownloadNotificationManager {
   private lateinit var notificationManager: NotificationManager
@@ -91,6 +95,47 @@ object DownloadNotificationManager {
     notificationManager.cancel(NOTIFICATION_ID)
   }
 
+  /**
+   * What the finished-download notification says, and where tapping it goes.
+   *
+   * Tapping used to hand the APK straight to the installer, so a download that cannot replace
+   * this app (different signing key, other build type, truncated file) answered with Android's
+   * bare "App not installed". Running the same preflight the in-app installer runs lets the
+   * notification name the reason and point at the releases page instead.
+   */
+  private fun installPrompt(version: String, filePath: String): Pair<String, PendingIntent> {
+    val problem = inspectDownloadedApk(appContext, java.io.File(filePath))
+    if (problem != null) {
+      return installProblemMessage(appContext, problem) to
+        PendingIntent.getActivity(
+          appContext,
+          1,
+          Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE_URL)),
+          PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+    }
+    val installIntent =
+      Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(
+          androidx.core.content.FileProvider.getUriForFile(
+            appContext,
+            "${appContext.packageName}.FileProvider",
+            java.io.File(filePath)
+          ),
+          "application/vnd.android.package-archive"
+        )
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+      }
+    return appContext.getString(R.string.tap_to_install_version, version) to
+      PendingIntent.getActivity(
+        appContext,
+        0,
+        installIntent,
+        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+      )
+  }
+
   @RequiresApi(Build.VERSION_CODES.BAKLAVA)
   private fun buildDownloadStartingModern(version: String, fileSize: String): Notification {
     val progressStyle =
@@ -169,27 +214,7 @@ object DownloadNotificationManager {
 
   @RequiresApi(Build.VERSION_CODES.BAKLAVA)
   private fun showDownloadCompleteModern(version: String, filePath: String) {
-    val installIntent =
-      Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(
-          androidx.core.content.FileProvider.getUriForFile(
-            appContext,
-            "${appContext.packageName}.FileProvider",
-            java.io.File(filePath)
-          ),
-          "application/vnd.android.package-archive"
-        )
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-
-    val pendingIntent =
-      PendingIntent.getActivity(
-        appContext,
-        0,
-        installIntent,
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-      )
+    val (promptText, pendingIntent) = installPrompt(version, filePath)
 
     val progressStyle =
       Notification.ProgressStyle()
@@ -213,7 +238,7 @@ object DownloadNotificationManager {
       Notification.Builder(appContext, CHANNEL_ID)
         .setSmallIcon(R.drawable.updated)
         .setContentTitle(appContext.getString(R.string.update_ready))
-        .setContentText(appContext.getString(R.string.tap_to_install_version, version))
+        .setContentText(promptText)
         .setAutoCancel(true)
         .setContentIntent(pendingIntent)
         .setStyle(progressStyle)
@@ -285,33 +310,14 @@ object DownloadNotificationManager {
   }
 
   private fun showDownloadCompleteLegacy(version: String, filePath: String) {
-    val installIntent =
-      Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(
-          androidx.core.content.FileProvider.getUriForFile(
-            appContext,
-            "${appContext.packageName}.FileProvider",
-            java.io.File(filePath)
-          ),
-          "application/vnd.android.package-archive"
-        )
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-
-    val pendingIntent =
-      PendingIntent.getActivity(
-        appContext,
-        0,
-        installIntent,
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
-      )
+    val (promptText, pendingIntent) = installPrompt(version, filePath)
 
     val notification =
       NotificationCompat.Builder(appContext, CHANNEL_ID)
         .setSmallIcon(R.drawable.updated)
         .setContentTitle(appContext.getString(R.string.update_ready))
-        .setContentText(appContext.getString(R.string.tap_to_install_version, version))
+        .setContentText(promptText)
+        .setStyle(NotificationCompat.BigTextStyle().bigText(promptText))
         .setProgress(0, 0, false)
         .setAutoCancel(true)
         .setContentIntent(pendingIntent)

@@ -518,6 +518,9 @@ class MainActivity : ComponentActivity() {
     val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
     val context = LocalContext.current
     var showUpdateDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Set by the update dialog and consumed once the nav controller exists (it is created
+    // further down), so "Update" opens the in-app updater instead of a browser page.
+    var openUpdateScreen by remember { androidx.compose.runtime.mutableStateOf(false) }
     var availableUpdateVersion by remember { androidx.compose.runtime.mutableStateOf("") }
     var availableUpdateChangelog by remember {
       androidx.compose.runtime.mutableStateOf<
@@ -760,6 +763,10 @@ class MainActivity : ComponentActivity() {
           onRemindLater = {
             snoozeUpdate(context, availableUpdateVersion)
             showUpdateDialog = false
+          },
+          onUpdate = {
+            showUpdateDialog = false
+            openUpdateScreen = true
           }
         )
       } else {
@@ -804,6 +811,16 @@ class MainActivity : ComponentActivity() {
         val bottomInsetDp = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
 
         val navController = rememberNavController()
+
+        // The update dialog sits above the navigation host, so it only raises a flag; the
+        // actual navigation happens here, once per request.
+        LaunchedEffect(openUpdateScreen) {
+          if (openUpdateScreen) {
+            openUpdateScreen = false
+            navController.navigate("update") { launchSingleTop = true }
+          }
+        }
+
         val blockedArtists by
           dataStore.data
             .map { it[BlockedArtistsKey] ?: emptySet() }

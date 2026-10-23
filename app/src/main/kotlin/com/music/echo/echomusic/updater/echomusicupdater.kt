@@ -35,7 +35,9 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LargeTopAppBar
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
 import androidx.compose.material3.SnackbarHostState
+import androidx.compose.material3.SnackbarResult
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -174,7 +176,7 @@ private fun fallbackApkUrl(version: String): String {
  * conditions up front lets the app say what is actually wrong. See [UpdateInstallPreflight].
  */
 @Suppress("DEPRECATION") // GET_SIGNATURES/versionCode cover minSdk 26 without version branching
-private fun inspectDownloadedApk(context: Context, file: File): UpdateInstallPreflight.Problem? {
+internal fun inspectDownloadedApk(context: Context, file: File): UpdateInstallPreflight.Problem? {
   val packageManager = context.packageManager
   val archive = packageManager.getPackageArchiveInfo(file.absolutePath, PackageManager.GET_SIGNATURES)
   val installed = packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
@@ -218,7 +220,7 @@ private fun apkAbis(file: File): List<String> =
     .getOrElse { emptyList() }
 
 /** Plain-language explanation of a failed pre-install check. */
-private fun installProblemMessage(
+internal fun installProblemMessage(
   context: Context,
   problem: UpdateInstallPreflight.Problem,
 ): String =
@@ -480,7 +482,28 @@ fun UpdateScreen(navController: NavHostController) {
                         // installed" that says nothing about the reason.
                         val problem = inspectDownloadedApk(context, file)
                         if (problem != null) {
-                          snackbarHostState.showSnackbar(installProblemMessage(context, problem))
+                          val message = installProblemMessage(context, problem)
+                          // A signing-key mismatch is the one failure the user can still
+                          // recover from, and only by reinstalling: point at the releases
+                          // page from the snackbar instead of leaving a dead end.
+                          if (problem == UpdateInstallPreflight.Problem.DIFFERENT_SIGNING_KEY) {
+                            val result =
+                              snackbarHostState.showSnackbar(
+                                message = message,
+                                actionLabel = context.getString(R.string.update_open_releases),
+                                withDismissAction = true,
+                                duration = SnackbarDuration.Long
+                              )
+                            if (result == SnackbarResult.ActionPerformed) {
+                              ContextCompat.startActivity(
+                                context,
+                                Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE_URL)),
+                                null
+                              )
+                            }
+                          } else {
+                            snackbarHostState.showSnackbar(message, duration = SnackbarDuration.Long)
+                          }
                           return@launch
                         }
                         if (
