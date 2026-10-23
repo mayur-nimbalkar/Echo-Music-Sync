@@ -1,6 +1,5 @@
 package echo.music.iad1tya.echomusic.component
 
-import android.content.Intent
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -9,14 +8,12 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import echo.music.iad1tya.R
 import echo.music.iad1tya.echomusic.updater.ChangelogSection
-import echo.music.iad1tya.echomusic.updater.RELEASES_PAGE_URL
 import echo.music.iad1tya.ui.utils.parseMarkdownToSections
 import echo.music.iad1tya.ui.utils.parseSimpleMarkdown
 import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
@@ -30,6 +27,9 @@ import racra.compose.smooth_corner_rect_library.AbsoluteSmoothCornerShape
  * @param onDismiss Invoked when the user dismisses the dialog (tap outside / back).
  * @param onRemindLater Invoked when the user asks to be reminded in 24 hours; the caller
  *   persists the snooze so the dialog stays away until then.
+ * @param onUpdate Invoked when the user asks to update now. The caller opens the in-app update
+ *   screen, which downloads the APK for this exact build type and runs the install preflight —
+ *   the browser detour used to leave the download and the certificate check to the user.
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -38,9 +38,9 @@ fun UpdateAvailableDialog(
   changelog: List<ChangelogSection>,
   description: String?,
   onDismiss: () -> Unit,
-  onRemindLater: () -> Unit
+  onRemindLater: () -> Unit,
+  onUpdate: () -> Unit
 ) {
-  val context = LocalContext.current
   val cardShape =
     AbsoluteSmoothCornerShape(
       cornerRadiusTL = 30.dp,
@@ -200,10 +200,7 @@ fun UpdateAvailableDialog(
           Button(
             onClick = {
               onDismiss()
-              // This fork's own releases. Upstream's site has no APK that can install over
-              // this build, so the button used to lead nowhere useful.
-              val intent = Intent(Intent.ACTION_VIEW, android.net.Uri.parse(RELEASES_PAGE_URL))
-              context.startActivity(intent)
+              onUpdate()
             },
             shape = actionShape,
           ) {

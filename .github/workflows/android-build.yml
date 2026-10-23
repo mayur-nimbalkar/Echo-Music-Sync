@@ -90,6 +90,52 @@ jobs:
         ./gradlew assembleArm64GmsDebug assembleUniversalGmsDebug \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
+    # A release can only update an installed app when it is signed with the SAME certificate.
+    # A rebuilt or renewed keystore produces perfectly good APKs that install nowhere, and the
+    # only symptom the user ever sees is Android's bare "App not installed". Check that both
+    # APKs are signed, by one key, and by the fingerprint this fork has always shipped with.
+    #
+    # The fingerprint is committed here on purpose: rotating the signing key must be a visible
+    # change in review, not a side effect of the keystore secret being replaced. Set the
+    # SIGNING_CERT_SHA256 repository variable to override it.
+    - name: Verify signing certificate
+      env:
+        PINNED_CERT: ${{ vars.SIGNING_CERT_SHA256 }}
+        COMMITTED_CERT: a2502f2fd12aa1d66d6b29e292efc17344c57d3d3fa4d52d66ad8596b82b395b
+      run: |
+        set -euo pipefail
+        APKSIGNER="$(ls "$ANDROID_HOME"/build-tools/*/apksigner | sort -V | tail -1)"
+        digest() {
+          { "$APKSIGNER" verify --print-certs "$1" 2>&1 || true; } |
+            sed -n 's/.*certificate SHA-256 digest: *//p' |
+            head -1 | tr -d ':' | tr 'A-F' 'a-f'
+        }
+        ARM="$(find app/build/outputs/apk -name 'app-arm64-gms-debug.apk' | head -1)"
+        UNI="$(find app/build/outputs/apk -name 'app-universal-gms-debug.apk' | head -1)"
+        ARM_CERT="$(digest "$ARM")"
+        UNI_CERT="$(digest "$UNI")"
+        if [ -z "$ARM_CERT" ] || [ -z "$UNI_CERT" ]; then
+          echo "::error::An APK is unsigned or fails signature verification, so it can never install over an existing app."
+          exit 1
+        fi
+        if [ "$ARM_CERT" != "$UNI_CERT" ]; then
+          echo "::error::The two APKs are signed with different keys ($ARM_CERT vs $UNI_CERT)."
+          exit 1
+        fi
+        echo "Signing certificate SHA-256: $ARM_CERT"
+        {
+          echo "### Signing certificate"
+          echo '```'
+          echo "$ARM_CERT"
+          echo '```'
+        } >> "$GITHUB_STEP_SUMMARY"
+        PINNED="$(printf '%s' "${PINNED_CERT:-$COMMITTED_CERT}" | tr -d ':' | tr 'A-F' 'a-f')"
+        if [ "$ARM_CERT" != "$PINNED" ]; then
+          echo "::error::The APKs are signed with $ARM_CERT, but this fork updates with $PINNED. An app can only be updated by the key it was installed with: restore the original keystore, or change the pinned fingerprint deliberately."
+          exit 1
+        fi
+        echo "Certificate matches the pinned fingerprint."
+
     # The in-app updater finds a release APK only by its exact asset name
     # (Echo-Music-<tag>-<arm64|universal>-<debug|stable>.apk, see UpdateAssetPicker.assetName).
     # Nothing else in CI would notice a version string that cannot sit in a filename, or an

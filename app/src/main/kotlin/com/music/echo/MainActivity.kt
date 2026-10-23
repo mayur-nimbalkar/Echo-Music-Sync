@@ -257,6 +257,13 @@ class MainActivity : ComponentActivity() {
     const val ACTION_SEARCH = "echo.music.iad1tya.action.SEARCH"
     const val ACTION_LIBRARY = "echo.music.iad1tya.action.LIBRARY"
     const val ACTION_RECOGNITION = "echo.music.iad1tya.action.RECOGNITION"
+
+    /**
+     * Open the in-app updater. Sent by the finished-download notification, which targets this
+     * activity explicitly so the tap cannot be intercepted (an implicit PendingIntent carrying
+     * the installer would be). The preflight and the install itself stay in the app.
+     */
+    const val ACTION_OPEN_UPDATES = "echo.music.iad1tya.action.OPEN_UPDATES"
     const val ACTION_NOW_PLAYING = "echo.music.iad1tya.action.NOW_PLAYING"
     const val ACTION_QUEUE = "echo.music.iad1tya.action.QUEUE"
     const val ACTION_OUTPUT_SWITCHER = "echo.music.iad1tya.action.OUTPUT_SWITCHER"
@@ -518,6 +525,9 @@ class MainActivity : ComponentActivity() {
     val enableHighRefreshRate by rememberPreference(EnableHighRefreshRateKey, defaultValue = true)
     val context = LocalContext.current
     var showUpdateDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+    // Set by the update dialog and consumed once the nav controller exists (it is created
+    // further down), so "Update" opens the in-app updater instead of a browser page.
+    var openUpdateScreen by remember { androidx.compose.runtime.mutableStateOf(false) }
     var availableUpdateVersion by remember { androidx.compose.runtime.mutableStateOf("") }
     var availableUpdateChangelog by remember {
       androidx.compose.runtime.mutableStateOf<
@@ -760,6 +770,10 @@ class MainActivity : ComponentActivity() {
           onRemindLater = {
             snoozeUpdate(context, availableUpdateVersion)
             showUpdateDialog = false
+          },
+          onUpdate = {
+            showUpdateDialog = false
+            openUpdateScreen = true
           }
         )
       } else {
@@ -804,6 +818,16 @@ class MainActivity : ComponentActivity() {
         val bottomInsetDp = WindowInsets.systemBars.asPaddingValues().calculateBottomPadding()
 
         val navController = rememberNavController()
+
+        // The update dialog sits above the navigation host, so it only raises a flag; the
+        // actual navigation happens here, once per request.
+        LaunchedEffect(openUpdateScreen) {
+          if (openUpdateScreen) {
+            openUpdateScreen = false
+            navController.navigate("update") { launchSingleTop = true }
+          }
+        }
+
         val blockedArtists by
           dataStore.data
             .map { it[BlockedArtistsKey] ?: emptySet() }
@@ -1128,6 +1152,9 @@ class MainActivity : ComponentActivity() {
           ) {
             handleAssistantSearchIntent(intent, navController)
           }
+          if (intent != null && intent.action == ACTION_OPEN_UPDATES) {
+            openUpdateScreen = true
+          }
         }
 
         DisposableEffect(Unit) {
@@ -1138,6 +1165,8 @@ class MainActivity : ComponentActivity() {
                 handleDeepLinkIntent(newIntent, navController)
               } else if (newIntent.action == ACTION_RECOGNITION) {
                 handleRecognitionIntent(newIntent, navController)
+              } else if (newIntent.action == ACTION_OPEN_UPDATES) {
+                openUpdateScreen = true
               } else if (
                 newIntent.action == android.provider.MediaStore.INTENT_ACTION_MEDIA_PLAY_FROM_SEARCH
               ) {
