@@ -6,14 +6,11 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
-import android.net.Uri
 import android.os.Build
 import androidx.annotation.RequiresApi
 import androidx.core.app.NotificationCompat
 import androidx.core.graphics.toColorInt
 import echo.music.iad1tya.R
-import echo.music.iad1tya.echomusic.updater.RELEASES_PAGE_URL
-import echo.music.iad1tya.echomusic.updater.installProblemMessage
 import echo.music.iad1tya.echomusic.updater.inspectDownloadedApk
 
 object DownloadNotificationManager {
@@ -96,47 +93,43 @@ object DownloadNotificationManager {
   }
 
   /**
-   * What the finished-download notification says, and where tapping it goes.
+   * What the finished-download notification says when the APK cannot replace this app.
    *
-   * Tapping used to hand the APK straight to the installer, so a download that cannot replace
-   * this app (different signing key, other build type, truncated file) answered with Android's
-   * bare "App not installed". Running the same preflight the in-app installer runs lets the
-   * notification name the reason and point at the releases page instead.
+   * The tap itself is always the same explicit intent into the app, so the preflight runs
+   * there and names the reason; the notification only hints that installing may be blocked.
    */
-  private fun installPrompt(version: String, filePath: String): Pair<String, PendingIntent> {
+  private fun installPromptText(version: String, filePath: String): String {
     val problem = inspectDownloadedApk(appContext, java.io.File(filePath))
-    if (problem != null) {
-      return installProblemMessage(appContext, problem) to
-        PendingIntent.getActivity(
-          appContext,
-          1,
-          Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE_URL)),
-          // FLAG_IMMUTABLE alone, no UPDATE_CURRENT: both intents built here are constant
-          // (one URL, one downloaded-file path), so there is nothing to refresh.
-          PendingIntent.FLAG_IMMUTABLE
-        )
+    return if (problem != null) {
+      appContext.getString(R.string.update_notification_blocked)
+    } else {
+      appContext.getString(R.string.tap_to_install_version, version)
     }
-    val installIntent =
-      Intent(Intent.ACTION_VIEW).apply {
-        setDataAndType(
-          androidx.core.content.FileProvider.getUriForFile(
-            appContext,
-            "${appContext.packageName}.FileProvider",
-            java.io.File(filePath)
-          ),
-          "application/vnd.android.package-archive"
-        )
-        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-        addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-      }
-    return appContext.getString(R.string.tap_to_install_version, version) to
-      PendingIntent.getActivity(
-        appContext,
-        0,
-        installIntent,
-        PendingIntent.FLAG_IMMUTABLE
-      )
   }
+
+  /**
+   * Tap target for the finished-download notification.
+   *
+   * It opens the update screen instead of handing an implicit intent to whatever app claims
+   * "package-archive" on this device. The app runs the install preflight itself, so a
+   * mismatched signature is explained rather than answered by Android with a bare
+   * "App not installed".
+   */
+  private fun updateTapPendingIntent(): PendingIntent =
+    PendingIntent.getActivity(
+      appContext,
+      0,
+      Intent(appContext, echo.music.iad1tya.MainActivity::class.java).apply {
+        action = echo.music.iad1tya.MainActivity.ACTION_OPEN_UPDATES
+        addFlags(
+          Intent.FLAG_ACTIVITY_NEW_TASK or
+            Intent.FLAG_ACTIVITY_SINGLE_TOP or
+            Intent.FLAG_ACTIVITY_CLEAR_TOP
+        )
+      },
+      // The intent is constant (same activity, same action), so there is nothing to refresh.
+      PendingIntent.FLAG_IMMUTABLE
+    )
 
   @RequiresApi(Build.VERSION_CODES.BAKLAVA)
   private fun buildDownloadStartingModern(version: String, fileSize: String): Notification {
@@ -216,7 +209,8 @@ object DownloadNotificationManager {
 
   @RequiresApi(Build.VERSION_CODES.BAKLAVA)
   private fun showDownloadCompleteModern(version: String, filePath: String) {
-    val (promptText, pendingIntent) = installPrompt(version, filePath)
+    val promptText = installPromptText(version, filePath)
+    val pendingIntent = updateTapPendingIntent()
 
     val progressStyle =
       Notification.ProgressStyle()
@@ -242,9 +236,7 @@ object DownloadNotificationManager {
         .setContentTitle(appContext.getString(R.string.update_ready))
         .setContentText(promptText)
         .setAutoCancel(true)
-        // The tap must reach whichever installer or browser the device provides, so the intent
-        // stays implicit by design while the PendingIntent is FLAG_IMMUTABLE.
-        .setContentIntent(pendingIntent) // lgtm[java/android-implicit-pendingintents]
+        .setContentIntent(pendingIntent)
         .setStyle(progressStyle)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setCategory(Notification.CATEGORY_STATUS)
@@ -314,7 +306,8 @@ object DownloadNotificationManager {
   }
 
   private fun showDownloadCompleteLegacy(version: String, filePath: String) {
-    val (promptText, pendingIntent) = installPrompt(version, filePath)
+    val promptText = installPromptText(version, filePath)
+    val pendingIntent = updateTapPendingIntent()
 
     val notification =
       NotificationCompat.Builder(appContext, CHANNEL_ID)
@@ -324,8 +317,7 @@ object DownloadNotificationManager {
         .setStyle(NotificationCompat.BigTextStyle().bigText(promptText))
         .setProgress(0, 0, false)
         .setAutoCancel(true)
-        // Same deliberate implicit intent as the modern notification above; see the note there.
-        .setContentIntent(pendingIntent) // lgtm[java/android-implicit-pendingintents]
+        .setContentIntent(pendingIntent)
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
