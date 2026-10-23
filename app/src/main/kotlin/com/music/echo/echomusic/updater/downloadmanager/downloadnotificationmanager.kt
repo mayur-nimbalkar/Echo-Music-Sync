@@ -111,7 +111,9 @@ object DownloadNotificationManager {
           appContext,
           1,
           Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE_URL)),
-          PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+          // FLAG_IMMUTABLE alone, no UPDATE_CURRENT: both intents built here are constant
+          // (one URL, one downloaded-file path), so there is nothing to refresh.
+          PendingIntent.FLAG_IMMUTABLE
         )
     }
     val installIntent =
@@ -132,7 +134,7 @@ object DownloadNotificationManager {
         appContext,
         0,
         installIntent,
-        PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        PendingIntent.FLAG_IMMUTABLE
       )
   }
 
@@ -240,12 +242,9 @@ object DownloadNotificationManager {
         .setContentTitle(appContext.getString(R.string.update_ready))
         .setContentText(promptText)
         .setAutoCancel(true)
-        // The tap has to reach the user's own installer/browser, so the intent stays implicit
-        // on purpose; the PendingIntent is IMMUTABLE, so nothing can fill it in. Suppressing
-        // the "implicit PendingIntent" check here rather than pinning a component that differs
-        // per OEM and would break on devices without it.
-        // lgtm[java/android-implicit-pendingintent]
-        .setContentIntent(pendingIntent)
+        // The tap must reach whichever installer or browser the device provides, so the intent
+        // stays implicit by design while the PendingIntent is FLAG_IMMUTABLE.
+        .setContentIntent(pendingIntent) // lgtm[java/android-implicit-pendingintents]
         .setStyle(progressStyle)
         .setVisibility(Notification.VISIBILITY_PUBLIC)
         .setCategory(Notification.CATEGORY_STATUS)
@@ -326,8 +325,7 @@ object DownloadNotificationManager {
         .setProgress(0, 0, false)
         .setAutoCancel(true)
         // Same deliberate implicit intent as the modern notification above; see the note there.
-        // lgtm[java/android-implicit-pendingintent]
-        .setContentIntent(pendingIntent)
+        .setContentIntent(pendingIntent) // lgtm[java/android-implicit-pendingintents]
         .setPriority(NotificationCompat.PRIORITY_HIGH)
         .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
         .setCategory(NotificationCompat.CATEGORY_STATUS)
