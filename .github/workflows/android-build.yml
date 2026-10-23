@@ -5,6 +5,8 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
+  # Manual trigger, so a runner hiccup can be re-run from the Actions tab without pushing.
+  workflow_dispatch:
 
 permissions:
   contents: read
