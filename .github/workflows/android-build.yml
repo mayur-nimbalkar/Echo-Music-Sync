@@ -224,14 +224,19 @@ jobs:
       run: |
         set -euo pipefail
         TAG="${{ github.ref_name }}"
-        if gh release view "$TAG" >/dev/null 2>&1; then
+        # This job never checks the repository out, so `gh` has no git remote to infer the
+        # repository from and every gh release call fails with "fatal: not a git repository".
+        # That is how v1.4.3.4's tag ended up with no release at all. Pass it explicitly.
+        REPO="$GITHUB_REPOSITORY"
+        if gh release view "$TAG" --repo "$REPO" >/dev/null 2>&1; then
           # Re-running the workflow for an existing tag replaces the two assets instead of
           # failing, so a rebuilt APK can always be published.
-          gh release upload "$TAG" dist/*.apk --clobber
+          gh release upload "$TAG" dist/*.apk --repo "$REPO" --clobber
         else
           gh release create "$TAG" dist/*.apk \
+            --repo "$REPO" \
             --title "$TAG" \
             --generate-notes \
             --latest
         fi
-        gh release view "$TAG" --json assets --jq '.assets[].name'
+        gh release view "$TAG" --repo "$REPO" --json assets --jq '.assets[].name'

@@ -66,6 +66,21 @@ jobs:
         # abi x variant combination (10 variants).
         ./gradlew assembleArm64FossDebug
 
+    # The Gradle daemon (4 GB, see gradle.properties) and the Kotlin compile daemon (3 GB)
+    # stay resident after the build. CodeQL then asks the runner for most of its memory for
+    # query evaluation, and the kernel kills the analysis part way through with no error
+    # message at all - which is how main ended up red at "25/80 queries" twice. Stopping the
+    # daemons hands that ~7 GB back before the analysis needs it.
+    - name: Stop build daemons
+      if: always()
+      run: |
+        ./gradlew --stop || true
+        pkill -f KotlinCompileDaemon || true
+        pkill -f GradleDaemon || true
+        sleep 2
+        # Printed so a future memory failure is diagnosable from the log alone.
+        free -m || true
+
     - name: Perform CodeQL Analysis
       uses: github/codeql-action/analyze@v4
       with:
