@@ -129,7 +129,7 @@ jobs:
         {
           echo "### Signing certificate"
           echo '```'
-          echo "$ARM_CERT"
+          echo "$DBG_CERT"
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
         PINNED="$(printf '%s' "${PINNED_CERT:-$COMMITTED_CERT}" | tr -d ':' | tr 'A-F' 'a-f')"
