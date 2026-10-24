@@ -1,5 +1,7 @@
 {
   "features": [
+    "Import from link: the flow formerly called “Reel import” now names what it actually accepts — share an Instagram post, a YouTube Short or an X post and its song is identified and added to the playlist you choose.",
+    "Releases now ship exactly two files: the universal stable APK and the universal debug APK. One universal build per type means every phone gets an installable update again (no arm64-only or per-ABI assets), and no changelog.json or checksum text files are published — release notes are the release body, which the app reads directly.",
     "Local Taste Engine: Offline, account-free algorithmic recommendation engine with skip tracking and taste mix generation",
     "Local Taste Engine (Slice 2): Multi-source Last.fm recommendation pipeline (similar tracks, similar artists, top genres) with 1-hour taste snapshot caching and additive scoring bonuses",
     "Local Taste Engine (Slice 3): Genre awareness with additive scoring bonus (+1.0), YouTube taste signals extraction, cross-screen generation status synchronization, and 'From Taste' quick action",
@@ -14,6 +16,8 @@
     "Reel Import song preview: play the identified song — or any candidate in the picker — before you confirm, so you can hear it first instead of trusting the name alone."
   ],
   "bug_fixes": [
+    "Reel import stopped at “Matching on YouTube Music” with “Couldn't identify this song” even when Shazam had named the track: identification now fingerprints the start, middle and end of the clip, retries the YouTube Music search with the title alone and then with the album, and falls back from the song catalogue to video results — where a large share of regional and film tracks live — before it gives up.",
+    "The import failure screen now offers “Try again”, which re-runs the whole identification for the link you just shared instead of forcing a manual search.",
     "Stats: fix NullPointerException crash when opening Stats by making SongWithStats thumbnailUrl and play counts safely nullable, removing unsafe forced unwraps, and guarding date sequence boundaries (#646)",
     "Playback: fix custom addon (BitChord) queue repeating the first track audio when advancing, caused by stale trackedMediaItem metadata and loose title-only matching; resolve per-mediaId metadata with strict title+artist+duration match and addon-aware preload",
     "Android Auto: fix Home shelves rendering without artwork and shuffle-led shelves ('Casuale') browsing empty, by falling back to the first item thumbnail and mapping musicShuffleRenderer",

@@ -199,7 +199,6 @@ import echo.music.iad1tya.ui.menu.YouTubeSongMenu
 import echo.music.iad1tya.ui.player.BottomSheetPlayer
 import echo.music.iad1tya.ui.screens.Screens
 import echo.music.iad1tya.ui.screens.SettingDialoge
-import echo.music.iad1tya.ui.screens.WelcomeDialog
 import echo.music.iad1tya.ui.screens.navigationBuilder
 import echo.music.iad1tya.ui.screens.settings.DarkMode
 import echo.music.iad1tya.ui.screens.settings.NavigationTab
@@ -1119,16 +1118,6 @@ class MainActivity : ComponentActivity() {
         val snackbarHostState = remember { SnackbarHostState() }
         var showSettingDialoge by remember { mutableStateOf(false) }
 
-        var showWelcomeDialog by remember { mutableStateOf(false) }
-
-        LaunchedEffect(Unit) {
-          val prefs = context.dataStore.data.first()
-          val lastOpened = prefs[echo.music.iad1tya.constants.LastOpenedVersionCodeKey] ?: -1
-          if (lastOpened < BuildConfig.VERSION_CODE) {
-            showWelcomeDialog = true
-          }
-        }
-
         LaunchedEffect(Unit) {
           val activeIntent = pendingIntent ?: intent
           if (activeIntent != null) {
@@ -1804,20 +1793,6 @@ class MainActivity : ComponentActivity() {
                 navController.navigate(route)
               },
               homeViewModel = homeViewModel
-            )
-          }
-
-          if (showWelcomeDialog) {
-            WelcomeDialog(
-              onDismissRequest = {
-                showWelcomeDialog = false
-                coroutineScope.launch {
-                  context.dataStore.edit {
-                    it[echo.music.iad1tya.constants.LastOpenedVersionCodeKey] =
-                      BuildConfig.VERSION_CODE
-                  }
-                }
-              }
             )
           }
 

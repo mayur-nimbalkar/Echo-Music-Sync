@@ -95,6 +95,9 @@ constructor(
   /** URL of the run whose pipeline reports should update the UI; filters stale reports. */
   private var currentRunUrl: String? = null
 
+  /** Last link imported, kept so a failed run can be retried without re-sharing the clip. */
+  private var lastStartUrl: String? = null
+
   init {
     viewModelScope.launch {
       defaultPlaylistId.value = context.dataStore.data.first()[ReelImportDefaultPlaylistIdKey].orEmpty()
@@ -142,6 +145,7 @@ constructor(
     matchJob?.cancel()
     searchJob?.cancel()
     pendingRecognition = null
+    lastStartUrl = url
     currentRunUrl = url
     ReelImportState.begin(url)
     _uiState.value = ReelImportUiState.Working(ReelImportStage.FETCHING_METADATA)
@@ -287,6 +291,25 @@ constructor(
     ReelImportState.clear()
     _uiState.value = ReelImportUiState.PickCandidate(emptyList(), "")
   }
+
+  /**
+   * Runs the last import again from the start. Identification depends on yt-dlp and on two
+   * networks (Shazam, YouTube Music), so a failure is often transient — the failure screen
+   * used to offer only a manual search, which throws away the clip the user just shared.
+   */
+  fun retry() {
+    val url = lastStartUrl ?: return
+    matchJob?.cancel()
+    searchJob?.cancel()
+    currentRunUrl = null
+    ReelImportState.clear()
+    _uiState.value = ReelImportUiState.Idle
+    startFromLink(url)
+  }
+
+  /** True when a failed import can be retried (i.e. a link was actually processed). */
+  val canRetry: Boolean
+    get() = lastStartUrl != null
 
   /** Manual-search escape hatch on the failure screen. */
   fun searchManuallyFromFailure() = startManualSearch()

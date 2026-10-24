@@ -573,7 +573,6 @@ val AccountNameKey = stringPreferencesKey("accountName")
 val AccountEmailKey = stringPreferencesKey("accountEmail")
 val AccountChannelHandleKey = stringPreferencesKey("accountChannelHandle")
 val UseLoginForBrowse = booleanPreferencesKey("useLoginForBrowse")
-val LastOpenedVersionCodeKey = intPreferencesKey("lastOpenedVersionCode")
 
 val LanguageCodeToName =
   mapOf(

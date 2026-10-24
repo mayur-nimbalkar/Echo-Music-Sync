@@ -51,8 +51,11 @@ object ReelMatcher {
    */
   private const val MAX_EXCERPT_BYTES = 800_000
 
-  /** Total audio kept for the two fingerprint windows (start + middle): ~50 s of mono. */
-  private const val MAX_TOTAL_PCM_BYTES = 1_600_000L
+  /**
+   * Total audio kept for fingerprinting: ~90 s of mono, the longest a clip can be. Every extra
+   * window is another chance for Shazam to hear the song, and clips often open with speech.
+   */
+  private const val MAX_TOTAL_PCM_BYTES = 2_880_000L
 
   /**
    * Audio format the excerpt is converted into before fingerprinting.
@@ -79,6 +82,13 @@ object ReelMatcher {
 
   /** Official-metadata queries tried before moving to fingerprinting. */
   private const val MAX_METADATA_QUERIES = 3
+
+  /**
+   * Query shapes tried for a song Shazam already named: "title artist", "title", then
+   * "title album". YouTube Music's song shelf is sensitive to the exact wording, and one
+   * extra lookup is far cheaper than telling the user the song was not found.
+   */
+  private const val MAX_RECOGNITION_QUERIES = 3
 
   /**
    * Caption-derived queries tried after fingerprinting failed. Captions name the song
@@ -229,10 +239,7 @@ object ReelMatcher {
         ReelImportState.report(ReelImportStage.MATCHING)
         val label = listOfNotNull(recognition.title, recognition.artist).joinToString(" · ").trim()
         ReelImportState.update(reelUrl) { it.copy(searchQuery = label) }
-        val song =
-          searchYouTubeMusic(listOfNotNull(recognition.title, recognition.artist).joinToString(" ").trim())
-            .orEmpty()
-            .firstOrNull()
+        val song = resolveRecognisedSong(recognition, reelUrl)
         if (song != null) {
           Timber.tag("ReelMatcher").i("Fingerprint identified: %s", label)
           return@withContext MatchResult.Matched(song, recognition, label)
@@ -309,6 +316,39 @@ object ReelMatcher {
       // best song-name hint we have (never a dead-end login wall).
       MatchResult.TitleFallback(emptyList(), hint)
     }
+
+  /**
+   * Resolves a song Shazam already named to a YouTube Music track.
+   *
+   * The joined "title artist" query is what usually hits, but YouTube Music's song shelf is
+   * wording-sensitive: a featured artist or an album suffix in the query can empty a shelf that
+   * held the exact track. Each fallback shape is one cheap lookup, and returning nothing here
+   * means the user is told the song was not found — so it is worth the extra tries.
+   *
+   * Returns the best-ranked result of the first query that produced any, or null.
+   */
+  private suspend fun resolveRecognisedSong(
+    recognition: RecognitionResult,
+    reelUrl: String,
+  ): SongItem? {
+    val queries =
+      listOfNotNull(
+          listOfNotNull(recognition.title, recognition.artist).joinToString(" ").trim(),
+          recognition.title,
+          listOfNotNull(recognition.title, recognition.album).joinToString(" ").trim(),
+        )
+        .filter { it.isNotBlank() }
+        .distinct()
+        .take(MAX_RECOGNITION_QUERIES)
+
+    for (query in queries) {
+      ReelImportState.update(reelUrl) { it.copy(searchQuery = query) }
+      val candidates = searchYouTubeMusic(query) ?: continue
+      val best = rankByQuery(query, candidates, MAX_PICKER_CANDIDATES).firstOrNull()
+      if (best != null) return best
+    }
+    return null
+  }
 
   /**
    * Runs [queries] against YouTube Music in order, returning the first non-empty result
@@ -506,9 +546,9 @@ object ReelMatcher {
   }
 
   /**
-   * Downloads the reel's audio and fingerprints two windows: the start and, when the
-   * clip is long enough, the middle. Reels frequently open with speech or silence and
-   * only play the song later — one window is often not enough.
+   * Downloads the clip's audio and fingerprints three windows: the start, the middle and the
+   * end. Clips frequently open with speech or silence and only play the song later — one
+   * window is often not enough, and a song that starts late is heard only by the last one.
    * Returns null when extraction/fingerprinting infrastructure is unavailable —
    * callers then fall back to weaker metadata hints.
    */
@@ -517,16 +557,15 @@ object ReelMatcher {
 
     ReelImportState.report(ReelImportStage.LISTENING)
 
-    // Split the extracted audio into overlapping windows and fingerprint each.
+    // Fingerprint three windows — the start, the middle and the end. Clips routinely open
+    // with speech over music, and a song that starts late is heard only by the later windows.
     val windowBytes = MAX_EXCERPT_BYTES
-    val totalWindows = if (pcm.size <= windowBytes) 1 else 2
-    val secondWindowStart =
-      if (totalWindows == 2) ((pcm.size - windowBytes).coerceAtLeast(0)) / 2 else 0
+    val starts = FingerprintWindows.startsFor(pcm.size, windowBytes)
 
-    for (windowIndex in 0 until totalWindows) {
-      val start = if (windowIndex == 0) 0 else secondWindowStart
+    starts.forEachIndexed { windowIndex, start ->
       val end = minOf(start + windowBytes, pcm.size)
-      if (end - start < 32_000) continue // ~0.5 s — too short to fingerprint
+      // ~0.5 s is too short to fingerprint; a later window may still be long enough.
+      if (end - start < 32_000) return@forEachIndexed
 
       val window = pcm.copyOfRange(start, end)
       val recognition = fingerprintWindow(window)
@@ -753,22 +792,36 @@ object ReelMatcher {
   }
 
   /**
-   * Searches YouTube Music's song filter.
+   * Searches YouTube Music, songs first.
    *
    * Returns `null` when the search could not be completed (timeout / network error) so
    * callers can distinguish "no results" from "YouTube Music unreachable" — the latter
    * must not be mistaken for proof that the song does not exist. Bounded by
    * [SEARCH_TIMEOUT_SECONDS] so a stalled request can never hang the pipeline.
+   *
+   * An empty song shelf is then retried against the video filter: a huge share of tracks
+   * (regional, film, indie, live cuts) live on YouTube Music only as videos, and the song
+   * filter answers those with nothing at all. Reading that empty page as "the song does not
+   * exist" is why a track Shazam had just named could still not be found.
    */
   private suspend fun searchYouTubeMusic(query: String): List<SongItem>? {
     if (query.isBlank()) return emptyList()
-    return withTimeoutOrNull(SEARCH_TIMEOUT_SECONDS.seconds) {
-      runCatching { YouTube.search(query, YouTube.SearchFilter.FILTER_SONG).getOrThrow() }
+    val songs = searchYouTubeMusic(query, YouTube.SearchFilter.FILTER_SONG)
+    if (songs == null || songs.isNotEmpty()) return songs
+    return searchYouTubeMusic(query, YouTube.SearchFilter.FILTER_VIDEO).orEmpty()
+  }
+
+  /** One YouTube Music search bounded by [SEARCH_TIMEOUT_SECONDS]; null on failure. */
+  private suspend fun searchYouTubeMusic(
+    query: String,
+    filter: YouTube.SearchFilter,
+  ): List<SongItem>? =
+    withTimeoutOrNull(SEARCH_TIMEOUT_SECONDS.seconds) {
+      runCatching { YouTube.search(query, filter).getOrThrow() }
         .onFailure { reportException(it) }
         .getOrNull()
         ?.items
         ?.filterIsInstance<SongItem>()
         .orEmpty()
     }
-  }
 }
