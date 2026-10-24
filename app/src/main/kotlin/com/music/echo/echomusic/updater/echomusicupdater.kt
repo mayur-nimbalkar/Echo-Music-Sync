@@ -163,7 +163,10 @@ private fun releaseOffersInstalledBuildType(assets: JSONArray): Boolean =
 
 /** Download URL for [version] used when the release JSON carried no asset URL. */
 private fun fallbackApkUrl(version: String): String {
-  val asset = UpdateAssetPicker.assetName(version, runsOnArm64(), BuildConfig.DEBUG)
+  // Releases ship the universal APK only (stable and debug), so guess that name: a per-ABI
+  // guess would point at an asset no release contains.
+  val asset =
+    UpdateAssetPicker.assetName(version, wantsArm64 = false, wantsDebug = BuildConfig.DEBUG)
   return "$RELEASE_DOWNLOAD_BASE/$version/$asset"
 }
 

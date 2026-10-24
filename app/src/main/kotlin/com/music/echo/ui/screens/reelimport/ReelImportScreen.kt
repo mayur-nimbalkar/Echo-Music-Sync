@@ -34,6 +34,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
@@ -200,6 +201,8 @@ fun ReelImportScreen(
         is ReelImportUiState.Failed ->
           FailedContent(
             reason = state.reason,
+            canRetry = state.reason != ReelImportStage.NOT_A_REEL && viewModel.canRetry,
+            onRetry = { viewModel.retry() },
             onSearchManually = { viewModel.searchManuallyFromFailure() },
             onClose = {
               viewModel.reset()
@@ -1066,6 +1069,8 @@ private fun FinishedContent(
 @Composable
 private fun FailedContent(
   reason: ReelImportStage,
+  canRetry: Boolean,
+  onRetry: () -> Unit,
   onSearchManually: () -> Unit,
   onClose: () -> Unit,
 ) {
@@ -1112,7 +1117,15 @@ private fun FailedContent(
         modifier = Modifier.fillMaxWidth().padding(20.dp),
       )
     }
-    Button(
+    if (canRetry) {
+      Button(
+        onClick = onRetry,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(54.dp),
+      ) {
+        Text(stringResource(R.string.reel_import_retry))
+      }
+    }
+    OutlinedButton(
       onClick = onSearchManually,
       modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp).height(54.dp),
     ) {

@@ -331,7 +331,7 @@ Run tests with:
 
 ## CI
 
-- `.github/workflows/android-build.yml` — runs `:core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64GmsDebugUnitTest` unit tests, then assembles the two debug APKs (arm64 + universal gms) signed with the permanent keystore. Only debug APKs are published; the foss flavor is skipped because it strips `REQUEST_INSTALL_PACKAGES`.
+- `.github/workflows/android-build.yml` — runs `:core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64GmsDebugUnitTest` unit tests, then assembles the universal **stable and debug** gms APKs signed with the permanent keystore (one APK per build type, no per-ABI artifacts). Pushing a `v*` tag runs the `release` job, which publishes exactly those two APKs — no checksums, no `changelog.json`; release notes are the release body. The foss flavor is skipped because it strips `REQUEST_INSTALL_PACKAGES`.
 - `.github/workflows/codeql.yml` — static analysis / security scanning.
 
 ## Local Taste Engine

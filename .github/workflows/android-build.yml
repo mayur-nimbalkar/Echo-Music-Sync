@@ -3,6 +3,8 @@ name: Android CI
 on:
   push:
     branches: [ "main" ]
+    # A version tag publishes a release (see the `release` job).
+    tags: [ "v*" ]
   pull_request:
     branches: [ "main" ]
   # Manual trigger, so a runner hiccup can be re-run from the Actions tab without pushing.
@@ -13,7 +15,7 @@ permissions:
 
 jobs:
   build:
-    name: Build Debug APKs
+    name: Build APKs
     runs-on: ubuntu-latest
 
     steps:
@@ -80,16 +82,15 @@ jobs:
         ./gradlew :core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64GmsDebugUnitTest \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
-    # Only debug APKs are published. They are built from the gms flavor on purpose: the foss
-    # flavor removes REQUEST_INSTALL_PACKAGES (F-Droid policy) and the Cast provider, and this
-    # fork's whole point is installing its own updates, so a foss build could neither launch
-    # the installer nor offer Cast.
-    #
-    # The universal APK stays available as a fallback: it bundles the yt-dlp/FFmpeg native
-    # payload for all four ABIs, while arm64-v8a is the ABI every current Android phone uses.
-    - name: Build Debug APKs (arm64 + universal)
+    # Releases ship exactly two APKs: the universal stable build and the universal debug build.
+    # One ABI-independent APK per build type means no device can be left without a compatible
+    # asset (the arm64-only builds used to do that on 32-bit phones), and the updater picks the
+    # asset of the install's own build type. The gms flavor is deliberate: the foss flavor
+    # removes REQUEST_INSTALL_PACKAGES (F-Droid policy) and the Cast provider, and this fork's
+    # whole point is installing its own updates.
+    - name: Build APKs (universal debug + universal stable)
       run: |
-        ./gradlew assembleArm64GmsDebug assembleUniversalGmsDebug \
+        ./gradlew assembleUniversalGmsDebug assembleUniversalGmsRelease \
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
     # A release can only update an installed app when it is signed with the SAME certificate.
@@ -112,28 +113,28 @@ jobs:
             sed -n 's/.*certificate SHA-256 digest: *//p' |
             head -1 | tr -d ':' | tr 'A-F' 'a-f'
         }
-        ARM="$(find app/build/outputs/apk -name 'app-arm64-gms-debug.apk' | head -1)"
-        UNI="$(find app/build/outputs/apk -name 'app-universal-gms-debug.apk' | head -1)"
-        ARM_CERT="$(digest "$ARM")"
-        UNI_CERT="$(digest "$UNI")"
-        if [ -z "$ARM_CERT" ] || [ -z "$UNI_CERT" ]; then
+        DBG="$(find app/build/outputs/apk -name 'app-universal-gms-debug.apk' | head -1)"
+        REL="$(find app/build/outputs/apk -name 'app-universal-gms-release.apk' | head -1)"
+        DBG_CERT="$(digest "$DBG")"
+        REL_CERT="$(digest "$REL")"
+        if [ -z "$DBG_CERT" ] || [ -z "$REL_CERT" ]; then
           echo "::error::An APK is unsigned or fails signature verification, so it can never install over an existing app."
           exit 1
         fi
-        if [ "$ARM_CERT" != "$UNI_CERT" ]; then
-          echo "::error::The two APKs are signed with different keys ($ARM_CERT vs $UNI_CERT)."
+        if [ "$DBG_CERT" != "$REL_CERT" ]; then
+          echo "::error::The two APKs are signed with different keys ($DBG_CERT vs $REL_CERT)."
           exit 1
         fi
-        echo "Signing certificate SHA-256: $ARM_CERT"
+        echo "Signing certificate SHA-256: $DBG_CERT"
         {
           echo "### Signing certificate"
           echo '```'
-          echo "$ARM_CERT"
+          echo "$DBG_CERT"
           echo '```'
         } >> "$GITHUB_STEP_SUMMARY"
         PINNED="$(printf '%s' "${PINNED_CERT:-$COMMITTED_CERT}" | tr -d ':' | tr 'A-F' 'a-f')"
-        if [ "$ARM_CERT" != "$PINNED" ]; then
-          echo "::error::The APKs are signed with $ARM_CERT, but this fork updates with $PINNED. An app can only be updated by the key it was installed with: restore the original keystore, or change the pinned fingerprint deliberately."
+        if [ "$DBG_CERT" != "$PINNED" ]; then
+          echo "::error::The APKs are signed with $DBG_CERT, but this fork updates with $PINNED. An app can only be updated by the key it was installed with: restore the original keystore, or change the pinned fingerprint deliberately."
           exit 1
         fi
         echo "Certificate matches the pinned fingerprint."
@@ -147,7 +148,7 @@ jobs:
       run: |
         set -euo pipefail
         AAPT2="$(ls "$ANDROID_HOME"/build-tools/*/aapt2 | sort -V | tail -1)"
-        APK="$(find app/build/outputs/apk -name 'app-arm64-gms-debug.apk' | head -1)"
+        APK="$(find app/build/outputs/apk -name 'app-universal-gms-release.apk' | head -1)"
         test -n "$APK"
         VERSION="$("$AAPT2" dump badging "$APK" | sed -n "s/^package:.*versionName='\([^']*\)'.*/\1/p")"
         echo "versionName = $VERSION"
@@ -155,21 +156,15 @@ jobs:
           echo "::error::versionName '$VERSION' cannot be used in a release asset name"
           exit 1
         fi
-        for abi in arm64 universal; do
-          asset="Echo-Music-v$VERSION-$abi-debug.apk"
+        # Exactly two assets, one per build type, both universal (see the build step above).
+        for type in stable debug; do
+          asset="Echo-Music-v$VERSION-universal-$type.apk"
           if ! printf '%s' "$asset" | grep -Eq '^Echo-Music-[^-]+-(arm64|universal)-(debug|stable)\.apk$'; then
             echo "::error::'$asset' does not match the updater's asset naming scheme"
             exit 1
           fi
-          echo "Publish the $abi debug APK as: $asset"
+          echo "Publish the universal $type APK as: $asset"
         done
-
-    - name: Upload arm64 Debug APK
-      uses: actions/upload-artifact@v7
-      with:
-        name: Echo-Music-arm64-Debug-APK
-        path: app/build/outputs/apk/**/app-arm64-gms-debug.apk
-        if-no-files-found: error
 
     - name: Upload universal Debug APK
       uses: actions/upload-artifact@v7
@@ -178,8 +173,65 @@ jobs:
         path: app/build/outputs/apk/**/app-universal-gms-debug.apk
         if-no-files-found: error
 
+    - name: Upload universal Stable APK
+      uses: actions/upload-artifact@v7
+      with:
+        name: Echo-Music-universal-Stable-APK
+        path: app/build/outputs/apk/**/app-universal-gms-release.apk
+        if-no-files-found: error
+
     - name: Require permanent signing
       if: env.THROWAWAY_SIGNING == 'true'
       run: |
         echo "::error::KEYSTORE_BASE64 is not set, so the APKs from this run are signed with a throwaway key and cannot update an installed app. Add KEYSTORE_BASE64, KEY_ALIAS, KEY_PASSWORD and STORE_PASSWORD under Settings -> Secrets and variables -> Actions and re-run this workflow. The artifacts above are build verification only - do not ship them."
         exit 1
+
+  # Pushing a version tag publishes that build. The release carries exactly two files — the
+  # universal stable APK and the universal debug APK — because those are the only assets the
+  # in-app updater can use: it picks the asset matching the install's build type, and a
+  # universal APK runs on every ABI. No checksums, no changelog.json: release notes are the
+  # release body, which the app already falls back to.
+  release:
+    name: Publish release (universal stable + debug)
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+    - name: Download built APKs
+      uses: actions/download-artifact@v7
+      with:
+        pattern: Echo-Music-universal-*-APK
+        path: artifacts
+
+    - name: Name APKs for the updater
+      run: |
+        set -euo pipefail
+        TAG="${{ github.ref_name }}"
+        mkdir -p dist
+        DEBUG_APK="$(find artifacts -name 'app-universal-gms-debug.apk' | head -1)"
+        STABLE_APK="$(find artifacts -name 'app-universal-gms-release.apk' | head -1)"
+        test -n "$DEBUG_APK" && test -n "$STABLE_APK"
+        cp "$DEBUG_APK" "dist/Echo-Music-$TAG-universal-debug.apk"
+        cp "$STABLE_APK" "dist/Echo-Music-$TAG-universal-stable.apk"
+        ls -1 dist
+
+    - name: Publish GitHub release
+      env:
+        GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      run: |
+        set -euo pipefail
+        TAG="${{ github.ref_name }}"
+        if gh release view "$TAG" >/dev/null 2>&1; then
+          # Re-running the workflow for an existing tag replaces the two assets instead of
+          # failing, so a rebuilt APK can always be published.
+          gh release upload "$TAG" dist/*.apk --clobber
+        else
+          gh release create "$TAG" dist/*.apk \
+            --title "$TAG" \
+            --generate-notes \
+            --latest
+        fi
+        gh release view "$TAG" --json assets --jq '.assets[].name'

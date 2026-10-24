@@ -35,8 +35,8 @@ android {
     targetSdk = 36
     // "1.4.3" is the upstream main source version; the trailing part marks the fork's add-on.
     // versionCode stays monotonic so it installs over previous fork builds.
-    versionCode = 185
-    versionName = "1.4.3.3"
+    versionCode = 186
+    versionName = "1.4.3.4"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
