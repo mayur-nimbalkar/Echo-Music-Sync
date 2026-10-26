@@ -2,8 +2,18 @@ package echo.music.iad1tya.echomusic.updater
 
 import echo.music.iad1tya.echomusic.updater.UpdateInstallPreflight.Problem
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertTrue
 import org.junit.Test
+
+/** The certificate every release APK is signed with. */
+private const val RELEASE_KEY =
+  "a2502f2fd12aa1d66d6b29e292efc17344c57d3d3fa4d52d66ad8596b82b395b"
+
+/** The key the fork's first stable release (v1.4.1.1) was signed with. */
+private const val OLDER_KEY =
+  "6d4d69b0e019b5038dd6a2722651eaf25eb56d03017ead1be6c77ff2eb97bb8d"
 
 class UpdateInstallPreflightTest {
 
@@ -67,6 +77,26 @@ class UpdateInstallPreflightTest {
     assertNull(check(apkAbis = emptyList(), deviceAbis = listOf("armeabi-v7a")))
     // ABI names are matched case-insensitively.
     assertNull(check(apkAbis = listOf("ARM64-V8A"), deviceAbis = listOf("arm64-v8a")))
+  }
+
+  @Test
+  fun `an install signed with the release key can be replaced in place`() {
+    assertTrue(UpdateInstallPreflight.releaseCanReplaceInstall(setOf(RELEASE_KEY), RELEASE_KEY))
+  }
+
+  @Test
+  fun `an install signed with an older key can never be replaced in place`() {
+    // v1.4.1.1 shipped a stable build signed with a different key than every release since, so
+    // that install reports "App not installed" for every later APK until it is uninstalled.
+    assertFalse(UpdateInstallPreflight.releaseCanReplaceInstall(setOf(OLDER_KEY), RELEASE_KEY))
+  }
+
+  @Test
+  fun `an unknown or blank certificate is never treated as compatible`() {
+    assertFalse(UpdateInstallPreflight.releaseCanReplaceInstall(emptySet(), RELEASE_KEY))
+    assertFalse(UpdateInstallPreflight.releaseCanReplaceInstall(setOf(RELEASE_KEY), ""))
+    // Certificate digests are hex, so case must not decide the answer.
+    assertTrue(UpdateInstallPreflight.releaseCanReplaceInstall(setOf(RELEASE_KEY.uppercase()), RELEASE_KEY))
   }
 
   @Test

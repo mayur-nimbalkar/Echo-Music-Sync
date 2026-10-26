@@ -1025,6 +1025,10 @@
     <string name="update_install_older_version">This APK is older than the installed app, so Android would refuse the downgrade. Install the newer build.</string>
     <string name="update_install_incompatible_abi">This APK has no native code for this device CPU. Download the universal APK instead.</string>
     <string name="update_notification_blocked">Update downloaded. Installing it may be blocked — tap to open Echo Music and see why.</string>
+    <!-- Shown before the download when this install carries a signing key the releases no
+         longer use: no APK can replace it in place, whatever it downloads. -->
+    <string name="update_reinstall_notice_title">One-time reinstall needed</string>
+    <string name="update_reinstall_notice_body">This copy of Echo Music was signed with the app\'s earlier key, so Android cannot replace it with a newer APK — it just says \'App not installed\'. Back up in Settings → Backup &amp; Restore, uninstall Echo Music once, then install the APK from your Downloads. Every later update installs in place.</string>
 
     <string name="recommendation_source">Recommendation provider</string>
     <string name="recommendation_source_youtube">YouTube Music</string>

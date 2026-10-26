@@ -122,6 +122,15 @@ const val LATEST_RELEASE_URL = "https://api.github.com/repos/$RELEASES_REPO/rele
 /** Human-readable releases page — where users should be sent to download an APK. */
 const val RELEASES_PAGE_URL = "https://github.com/$RELEASES_REPO/releases/latest"
 
+/**
+ * SHA-256 of the certificate every release APK is signed with. CI pins the same digest
+ * (`.github/workflows/android-build.yml`), and it is the identity Android compares before it
+ * replaces an installed app, so a build signed with anything else can only be installed by
+ * uninstalling the old one first.
+ */
+const val RELEASE_CERT_SHA256 =
+  "a2502f2fd12aa1d66d6b29e292efc17344c57d3d3fa4d52d66ad8596b82b395b"
+
 private const val RELEASES_LIST_URL = "https://api.github.com/repos/$RELEASES_REPO/releases"
 private const val RELEASE_DOWNLOAD_BASE = "https://github.com/$RELEASES_REPO/releases/download"
 
@@ -203,6 +212,27 @@ private fun signatureDigests(signatures: Array<Signature>?): Set<String> =
       .joinToString("") { byte -> "%02x".format(byte) }
   }
 
+/**
+ * False when this install was signed with a key the releases no longer use, which makes every
+ * in-place update impossible: Android answers with a bare "App not installed" and nothing can
+ * override it, so the updater has to say so before downloading anything.
+ *
+ * True in the normal case. A locally built debug APK signed with the standard debug key also
+ * reports false, and correctly so: the release debug APK cannot replace it either.
+ */
+@Suppress("DEPRECATION") // GET_SIGNATURES covers minSdk 26 without version branching
+internal fun installedBuildCanBeUpdated(context: Context): Boolean =
+  runCatching {
+      val installed =
+        context.packageManager.getPackageInfo(context.packageName, PackageManager.GET_SIGNATURES)
+      UpdateInstallPreflight.releaseCanReplaceInstall(
+        installedCertDigests = signatureDigests(installed.signatures),
+        releaseCertDigest = RELEASE_CERT_SHA256,
+      )
+    }
+    // If the package manager cannot describe this install at all, let the normal flow run.
+    .getOrDefault(true)
+
 /** ABIs the APK ships native code for; empty for a pure-Java APK. */
 private fun apkAbis(file: File): List<String> =
   runCatching {
@@ -283,6 +313,50 @@ sealed class EchoUpdateStatus {
   data class Error(val message: String) : EchoUpdateStatus()
 }
 
+/**
+ * Explains the one update an install can never take in place.
+ *
+ * Android replaces an app only when the new APK carries the same signing key as the installed
+ * one, and shows nothing but "App not installed" when it does not. This fork's first stable
+ * release used a different key, so those installs need one uninstall before they can move on.
+ */
+@Composable
+private fun OneTimeReinstallNotice(modifier: Modifier = Modifier) {
+  Surface(
+    modifier = modifier.fillMaxWidth(),
+    shape = RoundedCornerShape(20.dp),
+    color = MaterialTheme.colorScheme.errorContainer
+  ) {
+    Column(
+      modifier = Modifier.padding(horizontal = 16.dp, vertical = 14.dp),
+      verticalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+      Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+      ) {
+        Icon(
+          painter = painterResource(R.drawable.key),
+          contentDescription = null,
+          tint = MaterialTheme.colorScheme.onErrorContainer,
+          modifier = Modifier.size(18.dp)
+        )
+        Text(
+          text = stringResource(R.string.update_reinstall_notice_title),
+          style = MaterialTheme.typography.titleSmall,
+          fontWeight = FontWeight.Bold,
+          color = MaterialTheme.colorScheme.onErrorContainer
+        )
+      }
+      Text(
+        text = stringResource(R.string.update_reinstall_notice_body),
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onErrorContainer
+      )
+    }
+  }
+}
+
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun UpdateScreen(navController: NavHostController) {
@@ -299,6 +373,10 @@ fun UpdateScreen(navController: NavHostController) {
 
   val currentVersion = BuildConfig.VERSION_NAME
   val autoUpdateCheckEnabled = getAutoUpdateCheckSetting(context)
+  // Release APKs are signed with the fork's permanent key. An install carrying an older one
+  // can never be replaced in place, so it is told to reinstall once instead of being offered a
+  // download that Android would refuse at the very end.
+  val canUpdateInPlace = remember { installedBuildCanBeUpdated(context) }
 
   LaunchedEffect(Unit) { DownloadNotificationManager.initialize(context) }
 
@@ -467,10 +545,24 @@ fun UpdateScreen(navController: NavHostController) {
                 )
                 AnimatedActionButton(
                   text =
-                    if (isDownloading) "${(downloadProgress * 100).toInt()}%"
-                    else if (isDownloadComplete) stringResource(R.string.install)
-                    else stringResource(R.string.update_available),
+                    when {
+                      !canUpdateInPlace -> stringResource(R.string.update_open_releases)
+                      isDownloading -> "${(downloadProgress * 100).toInt()}%"
+                      isDownloadComplete -> stringResource(R.string.install)
+                      else -> stringResource(R.string.update_available)
+                    },
                   onClick = {
+                    // Nothing this app downloads can replace a differently signed install, so
+                    // send the user to the releases page: what they download there lands in
+                    // Downloads, which survives the uninstall a reinstall requires.
+                    if (!canUpdateInPlace) {
+                      ContextCompat.startActivity(
+                        context,
+                        Intent(Intent.ACTION_VIEW, Uri.parse(RELEASES_PAGE_URL)),
+                        null
+                      )
+                      return@AnimatedActionButton
+                    }
                     if (isDownloadComplete) {
                       val file = downloadedFile
                       if (file == null || !file.exists()) {
@@ -700,6 +792,10 @@ fun UpdateScreen(navController: NavHostController) {
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                   )
+                  if (!canUpdateInPlace) {
+                    Spacer(modifier = Modifier.height(16.dp))
+                    OneTimeReinstallNotice()
+                  }
                   Spacer(modifier = Modifier.height(24.dp))
                   if (!currentStatus.imageUrl.isNullOrBlank()) {
                     AsyncImage(

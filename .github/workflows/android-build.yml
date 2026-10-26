@@ -83,9 +83,10 @@ jobs:
           -Pkotlin.daemon.jvmargs=-Xmx6g
 
     # Releases ship exactly two APKs: the universal stable build and the universal debug build.
-    # One ABI-independent APK per build type means no device can be left without a compatible
-    # asset (the arm64-only builds used to do that on 32-bit phones), and the updater picks the
-    # asset of the install's own build type. The gms flavor is deliberate: the foss flavor
+    # "Universal" means both ARM ABIs in one APK, so no phone is left without a compatible
+    # asset (the arm64-only builds used to strand 32-bit phones); the x86 libraries are left
+    # out because only emulators load them and they were ~123 MB of the download. The updater
+    # picks the asset of the install's own build type. The gms flavor is deliberate: the foss flavor
     # removes REQUEST_INSTALL_PACKAGES (F-Droid policy) and the Cast provider, and this fork's
     # whole point is installing its own updates.
     - name: Build APKs (universal debug + universal stable)
