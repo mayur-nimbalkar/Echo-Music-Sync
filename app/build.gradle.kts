@@ -35,8 +35,8 @@ android {
     targetSdk = 36
     // "1.4.3" is the upstream main source version; the trailing part marks the fork's add-on.
     // versionCode stays monotonic so it installs over previous fork builds.
-    versionCode = 186
-    versionName = "1.4.3.4"
+    versionCode = 187
+    versionName = "1.4.3.5"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true
@@ -100,6 +100,14 @@ android {
     create("universal") {
       dimension = "abi"
       buildConfigField("String", "ARCHITECTURE", "\"universal\"")
+      // One APK for every phone: 64-bit and 32-bit ARM. The x86/x86_64 flavours below stay
+      // available for emulator builds, but their native code was ~123 MB of libraries no phone
+      // loads — a third of the download that then has to be staged again by the installer,
+      // which is where a device short on space answers "App not installed".
+      ndk {
+        abiFilters.add("arm64-v8a")
+        abiFilters.add("armeabi-v7a")
+      }
     }
     create("arm64") {
       dimension = "abi"

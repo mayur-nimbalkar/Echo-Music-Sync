@@ -276,6 +276,9 @@ docs, or CI steps that reference a `foss` build, and do not re-introduce a
 `foss` flavor without an explicit decision to do so. `variant` dimension now
 has a single flavor: `gms` (Google Cast + Firebase enabled). The `abi`
 dimension is unchanged: `universal`, `arm64`, `armeabi`, `x86`, `x86_64`.
+`universal` is the flavour the releases ship, and it packs `arm64-v8a` +
+`armeabi-v7a` only: the x86 libraries are emulator-only and were ~123 MB of
+the APK. Use the `x86`/`x86_64` flavours to build for an emulator.
 
 ```bash
 # Debug build
@@ -294,6 +297,23 @@ keep using `gmsImplementation` in `build.gradle.kts` for consistency and in
 case a FOSS flavor is reintroduced later.
 min/target/compile SDK: `minSdk 26`, `targetSdk 36`, `compileSdk 36`.
 NDK `27.0.12077973`. JDK 21 (kotlin/java toolchain).
+
+## Release signing & the in-app updater
+
+Every release APK — stable and debug — is signed with the fork's permanent keystore, and its
+SHA-256 fingerprint is pinned twice: `RELEASE_CERT_SHA256` in
+`app/src/main/kotlin/com/music/echo/echomusic/updater/echomusicupdater.kt` and
+`COMMITTED_CERT` in `.github/workflows/android-build.yml` (a `SIGNING_CERT_SHA256` repository
+variable overrides the workflow pin for a deliberate rotation). Android only replaces an app
+with a build signed by the key it was installed with, and a mismatch surfaces as a bare "App
+not installed", so change both pins in the same commit if the key ever changes.
+
+`installedBuildCanBeUpdated()` compares the installed signature with that digest before a
+download starts. When they differ — v1.4.1.1's stable build used an older key, and a locally
+built debug APK uses the debug key — the update button opens `RELEASES_PAGE_URL` and
+`OneTimeReinstallNotice` explains the one-time uninstall, because nothing the app downloads
+can replace a differently signed install. `UpdateInstallPreflight` stays pure JVM code with
+unit tests in `app/src/test`.
 
 ## Config & secrets
 
@@ -331,7 +351,7 @@ Run tests with:
 
 ## CI
 
-- `.github/workflows/android-build.yml` — runs `:core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64GmsDebugUnitTest` unit tests, then assembles the universal **stable and debug** gms APKs signed with the permanent keystore (one APK per build type, no per-ABI artifacts). Pushing a `v*` tag runs the `release` job, which publishes exactly those two APKs — no checksums, no `changelog.json`; release notes are the release body. The foss flavor is skipped because it strips `REQUEST_INSTALL_PACKAGES`.
+- `.github/workflows/android-build.yml` — runs `:core:testDebugUnitTest :lyrics:testDebugUnitTest testArm64GmsDebugUnitTest` unit tests, then assembles the universal **stable and debug** gms APKs (ARM libraries only, see Build variants) signed with the permanent keystore (one APK per build type, no per-ABI artifacts). Pushing a `v*` tag runs the `release` job, which publishes exactly those two APKs — no checksums, no `changelog.json`; release notes are the release body. The foss flavor is skipped because it strips `REQUEST_INSTALL_PACKAGES`.
 - `.github/workflows/codeql.yml` — static analysis / security scanning.
 
 ## Local Taste Engine

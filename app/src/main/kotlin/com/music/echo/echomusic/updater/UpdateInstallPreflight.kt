@@ -35,6 +35,21 @@ object UpdateInstallPreflight {
   }
 
   /**
+   * True when a release APK can replace this install in place.
+   *
+   * Android only replaces an app with an APK signed by the key that app was installed with, and
+   * there is no override for that. An install carrying an older key therefore cannot be
+   * downloaded into place at all: the only way forward is to uninstall it once, so the updater
+   * checks this *before* a large download instead of after it.
+   */
+  fun releaseCanReplaceInstall(
+    installedCertDigests: Set<String>,
+    releaseCertDigest: String,
+  ): Boolean =
+    releaseCertDigest.isNotBlank() &&
+      installedCertDigests.any { digest -> digest.equals(releaseCertDigest, ignoreCase = true) }
+
+  /**
    * The problem that will make the installer fail, or null when the APK can be installed.
    * [apkSignerMatches] means the download's signing certificate equals the installed app's.
    */
