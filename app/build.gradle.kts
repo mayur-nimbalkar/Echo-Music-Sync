@@ -33,10 +33,10 @@ android {
     applicationId = "echo.music.iad1tya"
     minSdk = 26
     targetSdk = 36
-    // "1.4.3" is the upstream main source version; the trailing part marks the fork's add-on.
+    // "1.4.4" is the upstream main source version; the trailing part marks the fork's add-on.
     // versionCode stays monotonic so it installs over previous fork builds.
-    versionCode = 187
-    versionName = "1.4.3.5"
+    versionCode = 188
+    versionName = "1.4.4.1"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     vectorDrawables.useSupportLibrary = true

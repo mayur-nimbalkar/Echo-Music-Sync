@@ -193,6 +193,7 @@ playback/       Media3/ExoPlayer service, download manager, queueing, audio
 quicksettings/  Android quick settings tile
 recognition/    Music recognition (Echo Find) app-side logic
 reelimport/     Clip import — Instagram reels/posts, YouTube Shorts, X (yt-dlp + Shazam → playlist), UI in ui/screens/reelimport/
+cloud/          Personal cloud streaming — Subsonic/Navidrome and Jellyfin API clients + repositories
 spotify/        Spotify API integration
 spotifyimport/  Import playlists/tracks from Spotify
 ui/
@@ -297,6 +298,24 @@ keep using `gmsImplementation` in `build.gradle.kts` for consistency and in
 case a FOSS flavor is reintroduced later.
 min/target/compile SDK: `minSdk 26`, `targetSdk 36`, `compileSdk 36`.
 NDK `27.0.12077973`. JDK 21 (kotlin/java toolchain).
+
+## Echo Wrapped, cloud streaming & themes (from upstream 1.4.4)
+
+- **Echo Wrapped** (`ui/screens/wrapped/`): `EchoWrappedViewModel` aggregates listening
+  history into `WrappedModels`; `WrappedScreen` renders the story (segmented progress bar,
+  aurora background, page pager) at route `wrapped`, with `WrappedShareHelper` producing the
+  poster/story images for sharing. `WrappedBannerCard` on Home opens it and stays dismissed
+  through `EchoWrappedBannerDismissedKey`.
+- **Personal cloud streaming** (`cloud/`): `NavidromeRepository` covers Subsonic-compatible
+  servers and `JellyfinRepository` covers Jellyfin; both hold server URL/credentials and are
+  exposed to the `settings/cloud/` login/dashboard screens (`NavidromeScreens.kt`,
+  `JellyfinScreens.kt`) through Hilt entry points in `di/`.
+- **Monochrome theme:** `IsMonochromeThemeKey` in Settings → Theme forces a
+  `PaletteStyle.Monochrome` scheme in `ui/theme/Theme.kt`, overriding dynamic colour and the
+  seed colour while keeping the pure-black variant.
+- **High-bitrate/lossless playback:** extension audio streams are preferred when
+  `PreferExtensionAudioKey` allows the addon, and `ResolvedStream`/`YTPlayerUtils`
+  sanitise manifest URLs and keep real format/bitrate metadata for FLAC tracks.
 
 ## Release signing & the in-app updater
 

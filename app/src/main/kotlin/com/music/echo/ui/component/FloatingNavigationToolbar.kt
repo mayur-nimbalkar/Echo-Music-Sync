@@ -88,6 +88,9 @@ fun FloatingNavigationToolbar(
   onFabClick: (() -> Unit)? = null,
   fabIconRes: Int? = null,
   fabContentDescription: String = "",
+  onMusicFlowClick: (() -> Unit)? = null,
+  musicFlowIconRes: Int? = R.drawable.swipe,
+  musicFlowContentDescription: String = "",
   onShuffleClick: (() -> Unit)? = null,
   shuffleEnabled: Boolean = false,
   shuffleIconRes: Int? = null,
@@ -97,6 +100,7 @@ fun FloatingNavigationToolbar(
   onAiHubClick: (() -> Unit)? = null,
   aiHubIconRes: Int? = null,
   aiHubContentDescription: String = "",
+  onWrappedClick: (() -> Unit)? = null,
   scrollBehavior: FloatingToolbarScrollBehavior? = null,
   onSearchLongClick: (() -> Unit)? = null,
   isSelected: (Screens) -> Boolean,
@@ -139,7 +143,7 @@ fun FloatingNavigationToolbar(
       )
 
   val hasOverflowMenu =
-    (onShuffleClick != null && shuffleIconRes != null) || onMusicRecognitionClick != null
+    onMusicFlowClick != null || (onShuffleClick != null && shuffleIconRes != null) || onMusicRecognitionClick != null || onWrappedClick != null
   val hasFabAction = onFabClick != null && fabIconRes != null
 
   Box(
@@ -163,12 +167,16 @@ fun FloatingNavigationToolbar(
         isSelected = isSelected,
         onItemClick = onItemClick,
         hasOverflowMenu = hasOverflowMenu,
+        onMusicFlowClick = onMusicFlowClick,
+        musicFlowIconRes = musicFlowIconRes,
+        musicFlowContentDescription = musicFlowContentDescription,
         onShuffleClick = onShuffleClick,
         shuffleEnabled = shuffleEnabled,
         shuffleIconRes = shuffleIconRes,
         onAiHubClick = onAiHubClick,
         aiHubIconRes = aiHubIconRes,
         aiHubContentDescription = aiHubContentDescription,
+        onWrappedClick = onWrappedClick,
         hasFabAction = hasFabAction,
         onFabClick = onFabClick,
         fabIconRes = fabIconRes,
@@ -189,12 +197,16 @@ private fun ToolbarItemsContainer(
   isSelected: (Screens) -> Boolean,
   onItemClick: (Screens, Boolean) -> Unit,
   hasOverflowMenu: Boolean = false,
+  onMusicFlowClick: (() -> Unit)? = null,
+  musicFlowIconRes: Int? = null,
+  musicFlowContentDescription: String = "",
   onShuffleClick: (() -> Unit)? = null,
   shuffleEnabled: Boolean = false,
   shuffleIconRes: Int? = null,
   onAiHubClick: (() -> Unit)? = null,
   aiHubIconRes: Int? = null,
   aiHubContentDescription: String = "",
+  onWrappedClick: (() -> Unit)? = null,
   hasFabAction: Boolean = false,
   onFabClick: (() -> Unit)? = null,
   fabIconRes: Int? = null,
@@ -271,12 +283,16 @@ private fun ToolbarItemsContainer(
       if (hasOverflowMenu) {
         FloatingToolbarOverflowMenuButton(
           pureBlack = pureBlack,
+          onMusicFlowClick = onMusicFlowClick,
+          musicFlowIconRes = musicFlowIconRes,
+          musicFlowContentDescription = musicFlowContentDescription,
           onShuffleClick = onShuffleClick,
           shuffleEnabled = shuffleEnabled,
           shuffleIconRes = shuffleIconRes,
           onAiHubClick = onAiHubClick,
           aiHubIconRes = aiHubIconRes,
-          aiHubContentDescription = aiHubContentDescription
+          aiHubContentDescription = aiHubContentDescription,
+          onWrappedClick = onWrappedClick
         )
       } else if (hasFabAction && fabIconRes != null && onFabClick != null) {
         FloatingToolbarFabAction(
@@ -294,12 +310,16 @@ private fun ToolbarItemsContainer(
 @Composable
 fun FloatingToolbarOverflowMenuButton(
   pureBlack: Boolean,
+  onMusicFlowClick: (() -> Unit)? = null,
+  musicFlowIconRes: Int? = null,
+  musicFlowContentDescription: String = "",
   onShuffleClick: (() -> Unit)?,
   shuffleEnabled: Boolean,
   shuffleIconRes: Int?,
   onAiHubClick: (() -> Unit)?,
   aiHubIconRes: Int?,
   aiHubContentDescription: String,
+  onWrappedClick: (() -> Unit)? = null,
 ) {
   var showSheet by rememberSaveable { mutableStateOf(false) }
   val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -340,6 +360,27 @@ fun FloatingToolbarOverflowMenuButton(
             compact = true,
             items =
               buildList {
+                if (onMusicFlowClick != null && musicFlowIconRes != null) {
+                  add(
+                    Material3SettingsItem(
+                      title = {
+                        Text(
+                          if (musicFlowContentDescription.isNotEmpty()) musicFlowContentDescription
+                          else stringResource(R.string.music_flow)
+                        )
+                      },
+                      icon = painterResource(musicFlowIconRes),
+                      onClick = {
+                        scope.launch {
+                          sheetState.hide()
+                          showSheet = false
+                          onMusicFlowClick()
+                        }
+                      }
+                    )
+                  )
+                }
+
                 if (onShuffleClick != null && shuffleIconRes != null) {
                   add(
                     Material3SettingsItem(
@@ -372,14 +413,27 @@ fun FloatingToolbarOverflowMenuButton(
                       tintIcon = false,
                       iconShape = androidx.compose.foundation.shape.CircleShape,
                       onClick = {
-                        scope
-                          .launch { sheetState.hide() }
-                          .invokeOnCompletion {
-                            if (!sheetState.isVisible) {
-                              showSheet = false
-                              onAiHubClick()
-                            }
-                          }
+                        scope.launch {
+                          sheetState.hide()
+                          showSheet = false
+                          onAiHubClick()
+                        }
+                      }
+                    )
+                  )
+                }
+
+                if (onWrappedClick != null) {
+                  add(
+                    Material3SettingsItem(
+                      title = { Text("Echo Wrapped") },
+                      icon = painterResource(R.drawable.star),
+                      onClick = {
+                        scope.launch {
+                          sheetState.hide()
+                          showSheet = false
+                          onWrappedClick()
+                        }
                       }
                     )
                   )

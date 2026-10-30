@@ -1,5 +1,10 @@
 {
   "features": [
+    "Echo Wrapped: a year-in-review story of your listening — top songs, artists and genres as animated pages with an aurora backdrop, reachable from Home or Settings, with shareable poster and story images.",
+    "Stream your own library: connect Subsonic/Navidrome or Jellyfin from Settings and browse, search and play your personal collection alongside YouTube Music.",
+    "A pure monochrome theme for anyone who wants the Nothing look without Material You colours.",
+    "High-bitrate and lossless playback: extension audio streams are preferred when available, manifest URLs are sanitised, and FLAC tracks keep their real format and bitrate metadata.",
+    "Music Flow has a new immersive, full-screen reel layout with Nothing-OS menus.",
     "The download is roughly a third smaller: release APKs now carry only the two ARM libraries phones actually load — the x86/x86_64 emulator code (~123 MB) is gone from the universal build, so there is less to download and less for the installer to stage.",
     "Import from link: the flow formerly called “Reel import” now names what it actually accepts — share an Instagram post, a YouTube Short or an X post and its song is identified and added to the playlist you choose.",
     "Releases now ship exactly two files: the universal stable APK and the universal debug APK. One universal build per type means every phone gets an installable update again (no arm64-only or per-ABI assets), and no changelog.json or checksum text files are published — release notes are the release body, which the app reads directly.",
@@ -17,6 +22,8 @@
     "Reel Import song preview: play the identified song — or any candidate in the picker — before you confirm, so you can hear it first instead of trusting the name alone."
   ],
   "bug_fixes": [
+    "AI settings: a failed connection test now shows the error inline instead of a blocking popup dialog.",
+    "Echo Wrapped sharing: fixed artwork rendering and the poster layout when sharing to stories.",
     "\"App not installed\" is now answered before it happens: the update screen checks this copy's signing key against the release key, and notices that the old-key install needs one reinstall instead of offering a download Android would refuse.",
     "An install carrying the old signing key no longer fails at the last step: its update button opens the releases page next to a “One-time reinstall needed” notice (back up, uninstall once, install from Downloads), and every later update installs in place.",
     "Reel import stopped at “Matching on YouTube Music” with “Couldn't identify this song” even when Shazam had named the track: identification now fingerprints the start, middle and end of the clip, retries the YouTube Music search with the title alone and then with the album, and falls back from the song catalogue to video results — where a large share of regional and film tracks live — before it gives up.",

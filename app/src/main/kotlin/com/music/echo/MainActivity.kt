@@ -19,13 +19,20 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.CubicBezierEasing
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
 import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -80,6 +87,8 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.toArgb
@@ -158,11 +167,13 @@ import echo.music.iad1tya.constants.ListenTogetherInTopBarKey
 import echo.music.iad1tya.constants.ListenTogetherUsernameKey
 import echo.music.iad1tya.constants.MiniPlayerBottomSpacing
 import echo.music.iad1tya.constants.MiniPlayerHeight
+import echo.music.iad1tya.constants.MusicFlowEnabledKey
 import echo.music.iad1tya.constants.NavigationBarAnimationSpec
 import echo.music.iad1tya.constants.NavigationBarHeight
 import echo.music.iad1tya.constants.PauseListenHistoryKey
 import echo.music.iad1tya.constants.PauseSearchHistoryKey
 import echo.music.iad1tya.constants.PureBlackKey
+import echo.music.iad1tya.constants.IsMonochromeThemeKey
 import echo.music.iad1tya.constants.SYSTEM_DEFAULT
 import echo.music.iad1tya.constants.SelectedThemeColorKey
 import echo.music.iad1tya.constants.StopMusicOnTaskClearKey
@@ -705,6 +716,7 @@ class MainActivity : ComponentActivity() {
 
     val pureBlackEnabled by rememberPreference(PureBlackKey, defaultValue = false)
     val pureBlack = remember(pureBlackEnabled, useDarkTheme) { pureBlackEnabled && useDarkTheme }
+    val isMonochrome by rememberPreference(IsMonochromeThemeKey, defaultValue = false)
 
     val (selectedThemeColorInt) =
       rememberPreference(SelectedThemeColorKey, defaultValue = DefaultThemeColor.toArgb())
@@ -756,6 +768,7 @@ class MainActivity : ComponentActivity() {
     echomusicTheme(
       darkTheme = useDarkTheme,
       pureBlack = pureBlack,
+      isMonochrome = isMonochrome,
       themeColor = themeColor,
     ) {
       val hapticHelper = rememberHapticHelper()
@@ -856,6 +869,8 @@ class MainActivity : ComponentActivity() {
           }
         val (useNewMiniPlayerDesign) =
           rememberPreference(UseNewMiniPlayerDesignKey, defaultValue = true)
+        val (musicFlowEnabled) =
+          rememberPreference(MusicFlowEnabledKey, defaultValue = true)
         val defaultOpenTab = remember {
           dataStore[DefaultOpenTabKey].toEnum(defaultValue = NavigationTab.HOME)
         }
@@ -916,7 +931,7 @@ class MainActivity : ComponentActivity() {
         val isLandscape = configuration.containerDpSize.width > configuration.containerDpSize.height
 
         val showRail =
-          isLandscape && !inSearchScreen && currentRoute != "ambient_mode" && currentRoute != "music_flow"
+          isLandscape && !inSearchScreen && currentRoute != "ambient_mode" && currentRoute != "music_flow" && currentRoute != "wrapped"
 
         val navPadding =
           if (shouldShowNavigationBar && !showRail) {
@@ -1336,7 +1351,48 @@ class MainActivity : ComponentActivity() {
                         }
                       }
                       IconButton(onClick = { showSettingDialoge = true }) {
-                        BadgedBox(badge = {}) {
+                        val profileRingTransition = rememberInfiniteTransition(label = "TopBarProfileRing")
+                        val profileRingAngle by profileRingTransition.animateFloat(
+                          initialValue = 0f,
+                          targetValue = 360f,
+                          animationSpec = infiniteRepeatable(
+                            animation = tween(12000, easing = LinearEasing),
+                            repeatMode = RepeatMode.Restart
+                          ),
+                          label = "profileRingAngle"
+                        )
+                        val profileRingAlpha by profileRingTransition.animateFloat(
+                          initialValue = 0.65f,
+                          targetValue = 1f,
+                          animationSpec = infiniteRepeatable(
+                            animation = tween(2400, easing = FastOutSlowInEasing),
+                            repeatMode = RepeatMode.Reverse
+                          ),
+                          label = "profileRingAlpha"
+                        )
+                        Box(
+                          modifier = Modifier.size(34.dp),
+                          contentAlignment = Alignment.Center
+                        ) {
+                          // Light Red Story / Wrapped Ring with slight gentle animation
+                          Box(
+                            modifier = Modifier
+                              .fillMaxSize()
+                              .rotate(profileRingAngle)
+                              .border(
+                                width = 2.dp,
+                                brush = Brush.sweepGradient(
+                                  listOf(
+                                    Color(0xFFFF5252).copy(alpha = profileRingAlpha),
+                                    Color(0xFFFF7A8A).copy(alpha = profileRingAlpha * 0.85f),
+                                    Color(0xFFFF8E9E).copy(alpha = profileRingAlpha),
+                                    Color(0xFFFF6B6B).copy(alpha = profileRingAlpha * 0.9f),
+                                    Color(0xFFFF5252).copy(alpha = profileRingAlpha)
+                                  )
+                                ),
+                                shape = CircleShape
+                              )
+                          )
                           if (accountImageUrl != null) {
                             AsyncImage(
                               model = accountImageUrl,
@@ -1347,7 +1403,8 @@ class MainActivity : ComponentActivity() {
                             Icon(
                               painter = painterResource(R.drawable.settings),
                               contentDescription = stringResource(R.string.account),
-                              modifier = Modifier.size(24.dp)
+                              modifier = Modifier.size(18.dp),
+                              tint = MaterialTheme.colorScheme.onSurface
                             )
                           }
                         }
@@ -1411,6 +1468,7 @@ class MainActivity : ComponentActivity() {
                   currentRoute != "ambient_mode" &&
                   currentRoute != "music_flow" &&
                   currentRoute != "uptime" &&
+                  currentRoute != "wrapped" &&
                   currentRoute?.startsWith("settings") != true
               ) {
                 Box {
@@ -1484,6 +1542,12 @@ class MainActivity : ComponentActivity() {
                       FloatingNavigationToolbar(
                         items = navigationItems,
                         pureBlack = pureBlack,
+                        onMusicFlowClick =
+                          if (musicFlowEnabled) {
+                            { navController.navigate("music_flow") { launchSingleTop = true } }
+                          } else null,
+                        musicFlowIconRes = R.drawable.swipe,
+                        musicFlowContentDescription = stringResource(R.string.music_flow),
                         onShuffleClick = onShuffleClick,
                         shuffleEnabled = shuffleEnabled,
                         shuffleIconRes = R.drawable.shuffle,
@@ -1495,6 +1559,9 @@ class MainActivity : ComponentActivity() {
                         },
                         aiHubIconRes = R.drawable.ai_pfp,
                         aiHubContentDescription = stringResource(R.string.ai_lyrics_translation),
+                        onWrappedClick = {
+                          navController.navigate("wrapped") { launchSingleTop = true }
+                        },
                         onSearchLongClick = onRailSearchLongClick,
                         isSelected = { screen ->
                           currentRoute == screen.route ||
@@ -1540,6 +1607,7 @@ class MainActivity : ComponentActivity() {
                     currentRoute != "ambient_mode" &&
                     currentRoute != "music_flow" &&
                     currentRoute != "uptime" &&
+                    currentRoute != "wrapped" &&
                     currentRoute?.startsWith("settings") != true
                 ) {
                   BottomSheetPlayer(
@@ -1624,6 +1692,12 @@ class MainActivity : ComponentActivity() {
                   onSearchLongClick = onRailSearchLongClick,
                   onMusicRecognitionClick = onMusicRecognitionClick,
                   musicRecognitionContentDescription = stringResource(R.string.recognition),
+                  onMusicFlowClick =
+                    if (musicFlowEnabled) {
+                      { navController.navigate("music_flow") { launchSingleTop = true } }
+                    } else null,
+                  musicFlowIconRes = R.drawable.swipe,
+                  musicFlowContentDescription = stringResource(R.string.music_flow),
                   onShuffleClick = onShuffleClick,
                   shuffleEnabled = shuffleEnabled,
                   shuffleIconRes = R.drawable.shuffle,
