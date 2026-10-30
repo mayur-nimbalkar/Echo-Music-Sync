@@ -45,9 +45,11 @@ val SelectedThemeColorKey = intPreferencesKey("selectedThemeColor")
 val DarkModeKey = stringPreferencesKey("darkMode")
 val PureBlackKey = booleanPreferencesKey("pureBlack")
 val PureBlackMiniPlayerKey = booleanPreferencesKey("pureBlackMiniPlayer")
+val IsMonochromeThemeKey = booleanPreferencesKey("is_monochrome_theme")
 val MiniPlayerOutlineKey = booleanPreferencesKey("miniPlayerOutline")
 val DensityScaleKey = floatPreferencesKey("density_scale_factor")
 val CustomDensityScaleKey = floatPreferencesKey("custom_density_scale_value")
+val EchoWrappedBannerDismissedKey = booleanPreferencesKey("echo_wrapped_banner_dismissed_2026")
 
 enum class DensityScale(val value: Float, val label: String) {
   NATIVE(1.0f, "Native (100%)"),
@@ -143,6 +145,7 @@ enum class AudioQuality(
 
   fun permitsLossless(): Boolean = this == LOSSLESS || this == AUTO
   fun permitsHigh(): Boolean = this == LOSSLESS || this == AUTO || this == HIGH
+  fun permitsAddons(): Boolean = this == LOSSLESS || this == AUTO || this == HIGH
 }
 
 val DownloadQualityKey = stringPreferencesKey("downloadQuality")
@@ -337,6 +340,7 @@ val MusicFlowAnimatedBackgroundKey = booleanPreferencesKey("music_flow_animated_
 val MusicFlowLyricsKey = booleanPreferencesKey("music_flow_lyrics")
 val MusicFlowCellularPrefetchKey = booleanPreferencesKey("music_flow_cellular_prefetch")
 val MusicFlowHideRecentKey = booleanPreferencesKey("music_flow_hide_recent")
+val PreferExtensionAudioKey = booleanPreferencesKey("prefer_extension_audio")
 
 enum class LibraryViewType {
   LIST,

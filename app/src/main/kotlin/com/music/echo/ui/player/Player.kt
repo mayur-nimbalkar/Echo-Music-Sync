@@ -38,6 +38,7 @@ import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.slideInVertically
 import androidx.compose.animation.slideOutVertically
 import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.basicMarquee
@@ -83,6 +84,7 @@ import androidx.compose.material3.OutlinedIconButton
 import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -184,6 +186,7 @@ import echo.music.iad1tya.constants.EnableLyricsThumbnailPlayPauseKey
 import echo.music.iad1tya.constants.HidePlayerThumbnailKey
 import echo.music.iad1tya.constants.HideStatusBarOnFullscreenKey
 import echo.music.iad1tya.constants.KeepScreenOn
+import echo.music.iad1tya.constants.MusicFlowEnabledKey
 import echo.music.iad1tya.constants.PlayerBackgroundStyle
 import echo.music.iad1tya.constants.PlayerBackgroundStyleKey
 import echo.music.iad1tya.constants.PlayerButtonsStyle
@@ -296,6 +299,8 @@ fun BottomSheetPlayer(
 
   val (useNewPlayerDesign, onUseNewPlayerDesignChange) =
     rememberPreference(UseNewPlayerDesignKey, defaultValue = true)
+  val (musicFlowEnabled) =
+    rememberPreference(MusicFlowEnabledKey, defaultValue = true)
   val showCodecOnPlayer by
     rememberPreference(echo.music.iad1tya.constants.ShowCodecOnPlayerKey, false)
   val hidePlayerSlider by
@@ -1573,6 +1578,43 @@ fun BottomSheetPlayer(
                 onSwipeLeft = { playerConnection.seekToNext() }
               )
         ) {
+          if (musicFlowEnabled) {
+            Surface(
+              onClick = {
+                navController.navigate("music_flow") { launchSingleTop = true }
+                state.collapseSoft()
+              },
+              shape = CircleShape,
+              color = TextBackgroundColor.copy(alpha = 0.12f),
+              contentColor = TextBackgroundColor,
+              border = BorderStroke(1.dp, TextBackgroundColor.copy(alpha = 0.2f)),
+              modifier = Modifier.padding(bottom = 6.dp)
+            ) {
+              Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+              ) {
+                Icon(
+                  painter = painterResource(R.drawable.swipe),
+                  contentDescription = null,
+                  tint = TextBackgroundColor,
+                  modifier = Modifier.size(13.dp)
+                )
+                Spacer(Modifier.width(5.dp))
+                Text(
+                  text = stringResource(R.string.music_flow),
+                  style =
+                    MaterialTheme.typography.labelSmall.copy(
+                      fontWeight = FontWeight.SemiBold,
+                      fontSize = 11.5.sp,
+                      letterSpacing = 0.2.sp
+                    ),
+                  color = TextBackgroundColor
+                )
+              }
+            }
+          }
+
           AnimatedContent(
             targetState = mediaMetadata.title,
             transitionSpec = { fadeIn() togetherWith fadeOut() },
@@ -2178,16 +2220,45 @@ fun BottomSheetPlayer(
             remember(currentAudioFormat, currentFormatEntity) {
               val localAudioFormat = currentAudioFormat
               val localFormatEntity = currentFormatEntity
-              val codecStr =
-                localAudioFormat?.sampleMimeType?.substringAfter("audio/")?.uppercase()
-                  ?: localFormatEntity?.codecs?.uppercase()
-                  ?: ""
-              var bitrateStr = ""
-              if (localFormatEntity?.bitrate != null && localFormatEntity.bitrate > 0) {
-                bitrateStr = "${localFormatEntity.bitrate / 1000} kbps"
-              } else if (localAudioFormat?.bitrate != null && localAudioFormat.bitrate > 0) {
-                bitrateStr = "${localAudioFormat.bitrate / 1000} kbps"
+
+              val sampleMime = localAudioFormat?.sampleMimeType?.lowercase().orEmpty()
+              val entityMime = localFormatEntity?.mimeType?.lowercase().orEmpty()
+              val entityCodecs = localFormatEntity?.codecs?.lowercase().orEmpty()
+
+              val codecStr = when {
+                sampleMime.contains("alac") -> "ALAC"
+                sampleMime.contains("flac") -> "FLAC"
+                sampleMime.contains("opus") -> "OPUS"
+                sampleMime.contains("mp4a") || sampleMime.contains("aac") -> "AAC"
+                sampleMime.contains("mpeg") || sampleMime.contains("mp3") -> "MP3"
+                sampleMime.contains("vorbis") -> "VORBIS"
+                // Fallbacks if ExoPlayer track format not ready yet:
+                entityCodecs.contains("alac") || entityMime.contains("alac") -> "ALAC"
+                entityCodecs.contains("flac") || entityMime.contains("flac") -> "FLAC"
+                entityCodecs.contains("opus") || entityMime.contains("opus") || entityMime.contains("webm") -> "OPUS"
+                entityCodecs.contains("mp4a") || entityCodecs.contains("aac") || entityMime.contains("mp4") -> "AAC"
+                entityCodecs.contains("mp3") || entityMime.contains("mpeg") -> "MP3"
+                entityCodecs.isNotBlank() && entityCodecs != "unknown" -> entityCodecs.uppercase()
+                sampleMime.isNotBlank() -> sampleMime.substringAfter("audio/").uppercase()
+                entityMime.isNotBlank() -> entityMime.substringAfter("audio/").uppercase()
+                else -> ""
               }
+
+              val rawBitrate = when {
+                localAudioFormat != null && localAudioFormat.bitrate > 0 -> localAudioFormat.bitrate
+                localAudioFormat != null && localAudioFormat.averageBitrate > 0 -> localAudioFormat.averageBitrate
+                localFormatEntity != null && localFormatEntity.bitrate > 0 -> {
+                  // Guard against stale poisoned bitrate (e.g. 1411200 saved for an opus/aac stream)
+                  if ((codecStr == "OPUS" || codecStr == "AAC") && localFormatEntity.bitrate > 400000) {
+                    if (codecStr == "OPUS") 160000 else 256000
+                  } else {
+                    localFormatEntity.bitrate
+                  }
+                }
+                else -> 0
+              }
+
+              val bitrateStr = if (rawBitrate > 0) "${rawBitrate / 1000} kbps" else ""
               listOf(codecStr, bitrateStr).filter { it.isNotEmpty() }.joinToString(" • ")
             }
 

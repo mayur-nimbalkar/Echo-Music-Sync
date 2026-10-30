@@ -115,6 +115,8 @@ fun NavGraphBuilder.navigationBuilder(
 
   composable("stats") { StatsScreen(navController) }
 
+  composable("wrapped") { com.music.echo.ui.screens.wrapped.WrappedScreen(navController) }
+
   composable("mood_and_genres") { MoodAndGenresScreen(navController, scrollBehavior) }
 
   composable("account") { AccountScreen(navController, scrollBehavior) }
@@ -598,4 +600,44 @@ fun NavGraphBuilder.navigationBuilder(
   composable("settings/changelog") { ChangelogScreen(navController, scrollBehavior) }
   composable("settings/commits") { CommitScreen(navController, scrollBehavior) }
   composable("generate") { GenerateScreen(navController) }
+
+  composable("settings/navidrome_login") {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val entryPoint =
+      dagger.hilt.android.EntryPointAccessors.fromApplication(
+        context.applicationContext,
+        com.music.echo.cloud.CloudEntryPoint::class.java
+      )
+    com.music.echo.ui.screens.settings.cloud.NavidromeLoginScreen(navController, entryPoint.navidromeRepository())
+  }
+
+  composable("settings/navidrome_dashboard") {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val entryPoint =
+      dagger.hilt.android.EntryPointAccessors.fromApplication(
+        context.applicationContext,
+        com.music.echo.cloud.CloudEntryPoint::class.java
+      )
+    com.music.echo.ui.screens.settings.cloud.NavidromeDashboardScreen(navController, entryPoint.navidromeRepository())
+  }
+
+  composable("settings/jellyfin_login") {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val entryPoint =
+      dagger.hilt.android.EntryPointAccessors.fromApplication(
+        context.applicationContext,
+        com.music.echo.cloud.CloudEntryPoint::class.java
+      )
+    com.music.echo.ui.screens.settings.cloud.JellyfinLoginScreen(navController, entryPoint.jellyfinRepository())
+  }
+
+  composable("settings/jellyfin_dashboard") {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val entryPoint =
+      dagger.hilt.android.EntryPointAccessors.fromApplication(
+        context.applicationContext,
+        com.music.echo.cloud.CloudEntryPoint::class.java
+      )
+    com.music.echo.ui.screens.settings.cloud.JellyfinDashboardScreen(navController, entryPoint.jellyfinRepository())
+  }
 }

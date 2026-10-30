@@ -69,6 +69,9 @@ fun AppNavigationRail(
   onSearchLongClick: (() -> Unit)? = null,
   onMusicRecognitionClick: (() -> Unit)? = null,
   musicRecognitionContentDescription: String = "",
+  onMusicFlowClick: (() -> Unit)? = null,
+  musicFlowIconRes: Int? = R.drawable.swipe,
+  musicFlowContentDescription: String = "",
   onShuffleClick: (() -> Unit)? = null,
   shuffleEnabled: Boolean = false,
   shuffleIconRes: Int? = null,
@@ -81,7 +84,8 @@ fun AppNavigationRail(
   val haptics = LocalHapticFeedback.current
   val viewConfiguration = LocalViewConfiguration.current
   var showMoreOptionsSheet by rememberSaveable { mutableStateOf(false) }
-  val hasMoreOptions = (onShuffleClick != null && shuffleIconRes != null) || onAiHubClick != null
+  val hasMoreOptions =
+    onMusicFlowClick != null || (onShuffleClick != null && shuffleIconRes != null) || onAiHubClick != null
 
   NavigationRail(modifier = modifier, containerColor = containerColor) {
     Spacer(modifier = Modifier.weight(1f))
@@ -197,6 +201,24 @@ fun AppNavigationRail(
         Material3SettingsGroup(
           items =
             buildList {
+              if (onMusicFlowClick != null && musicFlowIconRes != null) {
+                add(
+                  Material3SettingsItem(
+                    title = {
+                      Text(
+                        if (musicFlowContentDescription.isNotEmpty()) musicFlowContentDescription
+                        else stringResource(R.string.music_flow)
+                      )
+                    },
+                    icon = painterResource(musicFlowIconRes),
+                    onClick = {
+                      showMoreOptionsSheet = false
+                      onMusicFlowClick()
+                    }
+                  )
+                )
+              }
+
               if (onShuffleClick != null && shuffleIconRes != null) {
                 add(
                   Material3SettingsItem(

@@ -106,6 +106,7 @@ import echo.music.iad1tya.LocalDatabase
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
+import echo.music.iad1tya.constants.EchoWrappedBannerDismissedKey
 import echo.music.iad1tya.constants.GridItemSize
 import echo.music.iad1tya.constants.GridItemsSizeKey
 import echo.music.iad1tya.constants.GridThumbnailHeight
@@ -113,7 +114,6 @@ import echo.music.iad1tya.constants.InnerTubeCookieKey
 import echo.music.iad1tya.constants.ListItemHeight
 import echo.music.iad1tya.constants.ListThumbnailSize
 import echo.music.iad1tya.constants.RandomizeHomeOrderKey
-import echo.music.iad1tya.constants.MusicFlowEnabledKey
 import echo.music.iad1tya.constants.ShowSpeedDialKey
 import echo.music.iad1tya.constants.SmallGridThumbnailHeight
 import echo.music.iad1tya.constants.ThumbnailCornerRadius
@@ -133,7 +133,6 @@ import echo.music.iad1tya.ui.component.ArtistGridItem
 import echo.music.iad1tya.ui.component.ChipsRow
 import echo.music.iad1tya.ui.component.LocalBottomSheetPageState
 import echo.music.iad1tya.ui.component.LocalMenuState
-import echo.music.iad1tya.ui.component.musicflow.MusicFlowEntryCard
 import echo.music.iad1tya.ui.component.NavigationTitle
 import echo.music.iad1tya.ui.component.RandomizeGridItem
 import echo.music.iad1tya.ui.component.SongGridItem
@@ -603,7 +602,7 @@ fun HomeScreen(
   val innerTubeCookie by rememberPreference(InnerTubeCookieKey, "")
   val (randomizeHomeOrder) = rememberPreference(RandomizeHomeOrderKey, true)
   val (showSpeedDial) = rememberPreference(ShowSpeedDialKey, true)
-  val (musicFlowEnabled) = rememberPreference(MusicFlowEnabledKey, true)
+  val (isWrappedDismissed, onDismissWrapped) = rememberPreference(EchoWrappedBannerDismissedKey, defaultValue = false)
 
   val isLoggedIn = remember(innerTubeCookie) { "SAPISID" in parseCookieString(innerTubeCookie) }
   val url = if (isLoggedIn) accountImageUrl else null
@@ -936,11 +935,12 @@ fun HomeScreen(
           )
         }
 
-        if (musicFlowEnabled && selectedChip == null) {
-          item(key = "music_flow_entry") {
-            MusicFlowEntryCard(
-              onClick = { navController.navigate("music_flow") },
-              modifier = Modifier.animateItem(),
+        if (selectedChip == null && !isWrappedDismissed) {
+          item(key = "echo_wrapped_banner") {
+            com.music.echo.ui.screens.wrapped.WrappedBannerCard(
+              onClick = { navController.navigate("wrapped") },
+              onDismiss = { onDismissWrapped(true) },
+              modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
             )
           }
         }

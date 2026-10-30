@@ -8,7 +8,9 @@ import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.only
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.windowInsetsPadding
+import androidx.compose.ui.unit.dp
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -38,7 +40,9 @@ import com.music.innertube.models.WatchEndpoint
 import echo.music.iad1tya.LocalPlayerAwareWindowInsets
 import echo.music.iad1tya.LocalPlayerConnection
 import echo.music.iad1tya.R
+import echo.music.iad1tya.constants.EchoWrappedBannerDismissedKey
 import echo.music.iad1tya.constants.StatPeriod
+import echo.music.iad1tya.utils.rememberPreference
 import echo.music.iad1tya.extensions.toMediaItem
 import echo.music.iad1tya.models.toMediaMetadata
 import echo.music.iad1tya.playback.queues.ListQueue
@@ -73,6 +77,7 @@ fun StatsScreen(
   val isPlaying by playerConnection.isEffectivelyPlaying.collectAsState()
   val mediaMetadata by playerConnection.mediaMetadata.collectAsState()
   val context = LocalContext.current
+  val (isWrappedDismissed, onDismissWrapped) = rememberPreference(EchoWrappedBannerDismissedKey, defaultValue = false)
 
   val indexChips by viewModel.indexChips.collectAsState()
   val mostPlayedSongs by viewModel.mostPlayedSongs.collectAsState()
@@ -213,6 +218,16 @@ fun StatsScreen(
           currentValue = indexChips,
           onValueUpdate = { viewModel.indexChips.value = it },
         )
+      }
+
+      if (!isWrappedDismissed) {
+        item(key = "echo_wrapped_banner") {
+          com.music.echo.ui.screens.wrapped.WrappedBannerCard(
+            onClick = { navController.navigate("wrapped") },
+            onDismiss = { onDismissWrapped(true) },
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+          )
+        }
       }
 
       item(key = "mostPlayedSongs") {
@@ -409,6 +424,12 @@ fun StatsScreen(
         }
       },
       actions = {
+        IconButton(onClick = { navController.navigate("wrapped") }) {
+          Icon(
+            painter = painterResource(R.drawable.star),
+            contentDescription = "Echo Wrapped",
+          )
+        }
         IconButton(onClick = { showHistorySheet = true }) {
           Icon(
             painter = painterResource(R.drawable.history),
