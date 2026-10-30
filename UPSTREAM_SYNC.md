@@ -23,6 +23,18 @@ upstream/main  3eebb2c  Replace Echo Music logo and update description
 
 One squash commit per merged PR = upstream stays a clean prefix of the fork's history.
 
+## Sync log
+
+- **2026-10-29 — upstream `v1.4.4` (`c0de8405`)**: merged into `sync/upstream-oct-29`
+  (merge commit, upstream kept as the second parent). Only `app/build.gradle.kts`
+  conflicted, always on the version block: keep the fork's `versionCode` and use
+  `<upstream-version>.<fork-add-on>` (`1.4.4.1`, versionCode 188). Upstream's Echo Wrapped,
+  cloud streaming (Subsonic/Navidrome/Jellyfin), monochrome theme and high-bitrate playback
+  came in; the fork's updater + certificate preflight, clip import, ARM-only `universal`
+  flavor, two-APK release workflow and version numbering were kept. Note that the merge
+  commit is not a squash commit, so the next upstream merge still works but keep the
+  version-block resolution in mind rather than expecting a fast-forward.
+
 ## Rules that keep it clean
 
 1. **Never build features directly on `main`.** Always branch, open a PR, merge via squash.
